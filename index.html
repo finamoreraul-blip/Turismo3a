@@ -7,228 +7,210 @@
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700;800&display=swap" rel="stylesheet">
 <style>
   *{margin:0;padding:0;box-sizing:border-box;font-family:'Poppins',sans-serif}
-  body{background:#f0f4f8;color:#333}
+  body{background:#f8f9fa;color:#333}
 
-  /* MENU HORIZONTAL ARRIBA */
- .menu-top{
-    position:fixed;top:0;left:0;width:100%;background:rgba(0,86,179,.95);backdrop-filter:blur(10px);
-    z-index:1000;padding:12px 0;box-shadow:0 4px 15px rgba(0,0,0,.2)
-  }
- .menu-scroll{display:flex;gap:20px;overflow-x:auto;padding:0 20px;scrollbar-width:none}
- .menu-scroll::-webkit-scrollbar{display:none}
- .menu-item{
-    color:white;text-decoration:none;font-weight:600;font-size:.9em;white-space:nowrap;
-    padding:8px 15px;border-radius:20px;transition:.3s;display:flex;align-items:center;gap:6px
-  }
- .menu-item:hover{background:rgba(255,255,255,.2)}
+  /* HEADER ESTILO NECOCHEA */
+.header{position:fixed;top:0;width:100%;background:white;z-index:1000;box-shadow:0 2px 10px rgba(0,0,0,.1)}
+.nav{display:flex;justify-content:space-between;align-items:center;padding:15px 5%;max-width:1300px;margin:0 auto}
+.logo{font-size:1.5em;font-weight:800;color:#0056b3}
+.menu{display:flex;gap:25px;list-style:none}
+.menu a{text-decoration:none;color:#333;font-weight:600;font-size:.95em}
+.menu a:hover{color:#0056b3}
 
- .hero{height:80vh;position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;color:white;overflow:hidden;margin-top:60px}
- .slide{position:absolute;top:0;left:0;width:100%;height:100%;background-size:cover;background-position:center;opacity:0;transition:opacity 1.5s ease-in-out}
- .slide.active{opacity:1}
- .slide::after{content:'';position:absolute;top:0;left:0;width:100%;height:100%;background:linear-gradient(rgba(0,0,0,.5),rgba(0,0,0,.5))}
- .hero-content{position:relative;z-index:2}
- .hero h1{font-size:3.5em;font-weight:800;text-shadow:3px 3px 15px rgba(0,0,0,.7)}
- .hero p{font-size:1.4em;margin-top:10px;font-weight:300;text-shadow:2px 2px 10px rgba(0,0,0,.7)}
- .puntos{position:absolute;bottom:30px;z-index:2;display:flex;gap:10px}
- .punto{width:12px;height:12px;border-radius:50%;background:rgba(255,255,255,.5);cursor:pointer}
- .punto.active{background:white}
+  /* BANNER CON ESLOGAN - ESTILO NECOCHEA */
+.banner{margin-top:70px;height:70vh;position:relative;overflow:hidden}
+.slide{position:absolute;width:100%;height:100%;background-size:cover;background-position:center;opacity:0;transition:1s}
+.slide.active{opacity:1}
+.slide::after{content:'';position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.4)}
+.banner-content{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;color:white;z-index:2}
+.banner-content h1{font-size:3.5em;font-weight:800;text-shadow:3px 3px 10px rgba(0,0,0,.7)}
+.banner-content p{font-size:1.5em;margin-top:10px;font-weight:300}
 
-  /* FARMACIA DE TURNO DESTACADA */
- .farmacia-turno{
-    background:linear-gradient(135deg,#25D366,#128C7E);color:white;padding:20px;border-radius:15px;
-    margin:20px 0;text-align:center;box-shadow:0 4px 15px rgba(37,211,102,.3)
-  }
- .farmacia-turno h3{font-size:1.3em;margin-bottom:8px}
- .farmacia-turno p{font-size:1.1em;font-weight:600}
+  /* SECCIONES */
+.container{max-width:1300px;margin:0 auto;padding:50px 5%}
+.titulo-seccion{text-align:center;font-size:2.5em;color:#0056b3;margin-bottom:40px;font-weight:700}
+.grid-4{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:25px}
+.card{background:white;border-radius:15px;overflow:hidden;box-shadow:0 5px 15px rgba(0,0,0,.1);transition:.3s}
+.card:hover{transform:translateY(-8px)}
+.card img{width:100%;height:220px;object-fit:cover}
+.card-body{padding:20px}
+.card-body h3{color:#0056b3;margin-bottom:10px;font-size:1.3em}
+.btn{background:#0056b3;color:white;padding:10px 20px;border-radius:25px;text-decoration:none;display:inline-block;margin-top:10px;font-weight:600}
+.btn:hover{background:#003d82}
 
- .container{max-width:1100px;margin:0 auto;padding:30px 20px}
- .seccion{background:white;border-radius:18px;margin:25px 0;box-shadow:0 6px 20px rgba(0,0,0,.08);overflow:hidden}
- .seccion-header{padding:28px;font-size:1.6em;font-weight:700;background:linear-gradient(135deg,#0056b3,#0077cc);color:white;cursor:pointer;display:flex;align-items:center;gap:18px}
- .seccion-header:hover{opacity:.9}
- .seccion-content{display:none;padding:30px;background:#fdfdfd}
- .seccion.active.seccion-content{display:block}
- .emoji{font-size:2em}
- .flecha{margin-left:auto;font-size:1.3em;transition:.3s}
- .seccion.active.flecha{transform:rotate(180deg)}
- .grid-servicios{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:18px;margin:25px 0}
- .mini-card{background:linear-gradient(135deg,#fff,#f8f9fa);border:2px solid #e0e0e0;border-radius:15px;padding:25px 15px;text-align:center;cursor:pointer;transition:.3s}
- .mini-card:hover{background:linear-gradient(135deg,#0056b3,#0077cc);color:white;border-color:#0056b3;transform:translateY(-5px)}
- .mini-card.emoji{font-size:3em;display:block;margin-bottom:10px}
- .grid-lugares{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px}
- .card-lugar{background:white;border-radius:12px;overflow:hidden;box-shadow:0 3px 10px rgba(0,0,0,.1)}
- .card-lugar img{width:100%;height:180px;object-fit:cover}
- .card-body{padding:15px}
- .card-body h5{color:#0056b3;font-size:1.1em;margin-bottom:5px}
- .novedad{background:#fff3cd;border-left:5px solid #ffc107;padding:20px;border-radius:10px;margin:15px 0}
- .fecha{font-size:.8em;color:#856404;font-weight:600}
- .mapa iframe{width:100%;height:450px;border:0;border-radius:15px}
-  footer{background:#1a1a1a;color:white;text-align:center;padding:40px;margin-top:50px}
-  @media(max-width:768px){.hero h1{font-size:2.5em}}
+  /* EVENTOS */
+.evento{display:flex;gap:20px;background:white;padding:20px;border-radius:15px;margin-bottom:20px;box-shadow:0 3px 10px rgba(0,0,0,.08)}
+.evento img{width:200px;height:140px;object-fit:cover;border-radius:10px}
+.fecha-evento{background:#0056b3;color:white;padding:5px 15px;border-radius:20px;font-size:.85em;display:inline-block;margin-bottom:10px}
+
+  /* FARMACIA TURNO */
+.farmacia-box{background:linear-gradient(135deg,#25D366,#128C7E);color:white;padding:25px;border-radius:15px;text-align:center;margin:40px 0}
+
+  footer{background:#1a1a1a;color:white;padding:50px 5%;text-align:center}
+  @media(max-width:768px){.menu{display:none}.banner-content h1{font-size:2em}}
 </style>
 </head>
 <body>
 
-<!-- MENU HORIZONTAL ARRIBA -->
-<nav class="menu-top">
-  <div class="menu-scroll">
-    <a href="#novedades" class="menu-item">📢 Novedades</a>
-    <a href="#visitar" class="menu-item">📍 Qué Visitar</a>
-    <a href="#servicios" class="menu-item">🛎️ Servicios</a>
-    <a href="#hacer" class="menu-item">🎉 Qué Hacer</a>
-    <a href="#llegar" class="menu-item">🗺️ Cómo Llegar</a>
-    <a href="#farmacia-turno" class="menu-item">💊 Farmacia Turno</a>
-  </div>
-</nav>
+<!-- HEADER -->
+<header class="header">
+  <nav class="nav">
+    <div class="logo">Turismo Tres Arroyos</div>
+    <ul class="menu">
+      <li><a href="#inicio">Inicio</a></li>
+      <li><a href="#hacer">Qué Hacer</a></li>
+      <li><a href="#dormir">Dónde Dormir</a></li>
+      <li><a href="#comer">Dónde Comer</a></li>
+      <li><a href="#balnearios">Balnearios</a></li>
+      <li><a href="#eventos">Eventos</a></li>
+    </ul>
+  </nav>
+</header>
 
-<div class="hero">
+<!-- BANNER CON ESLOGAN -->
+<section id="inicio" class="banner">
   <div class="slide active" style="background-image:url('https://upload.wikimedia.org/wikipedia/commons/8/8e/Plaza_San_Martin_Tres_Arroyos.jpg')"></div>
   <div class="slide" style="background-image:url('https://www.tresarroyos.gov.ar/wp-content/uploads/2021/05/parque-cabanas-aereo.jpg')"></div>
-  <div class="slide" style="background-image:url('https://www.lu24.com.ar/wp-content/uploads/2023/02/predio-trigo.jpg')"></div>
   <div class="slide" style="background-image:url('https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=1200')"></div>
-  <div class="slide" style="background-image:url('https://www.tresarroyos.gov.ar/wp-content/uploads/2021/03/polideportivo.jpg')"></div>
+  <div class="slide" style="background-image:url('https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=1200')"></div>
 
-  <div class="hero-content">
+  <div class="banner-content">
     <h1>Tres Arroyos</h1>
     <p>El Corazón Productivo del Sudeste Bonaerense</p>
   </div>
-
-  <div class="puntos">
-    <span class="punto active" onclick="irSlide(0)"></span>
-    <span class="punto" onclick="irSlide(1)"></span>
-    <span class="punto" onclick="irSlide(2)"></span>
-    <span class="punto" onclick="irSlide(3)"></span>
-    <span class="punto" onclick="irSlide(4)"></span>
-  </div>
-</div>
+</section>
 
 <div class="container">
 
-  <!-- FARMACIA DE TURNO DESTACADA -->
-  <div id="farmacia-turno" class="farmacia-turno">
+  <!-- FARMACIA DE TURNO -->
+  <div class="farmacia-box">
     <h3>💊 Farmacia de Turno Hoy</h3>
-    <p id="farmaciaNombre">Cargando...</p>
-    <p id="farmaciaDir" style="font-size:.9em;font-weight:400"></p>
-    <p style="font-size:.8em;margin-top:8px">Actualiza este dato todos los días en el código</p>
+    <h2 id="farmaciaNombre">Farmacia Central</h2>
+    <p id="farmaciaDir">Av. San Martín 400 - Tel: 02983-422111</p>
   </div>
 
-  <!-- 0. NOVEDADES -->
-  <div id="novedades" class="seccion">
-    <div class="seccion-header" onclick="toggle(this)">
-      <span class="emoji">📢</span> Novedades y Eventos <span class="flecha">▼</span>
-    </div>
-    <div class="seccion-content">
-      <div class="novedad">
-        <span class="fecha">16 Abril 2026</span>
-        <h5>Feria de Emprendedores en Parque Cabañas</h5>
-        <p>Todos los sábados y domingos de 15 a 20hs. Artesanías, gastronomía y shows en vivo.</p>
-      </div>
-      <div class="novedad">
-        <span class="fecha">Próximamente</span>
-        <h5>Fiesta Nacional del Trigo 2026</h5>
-        <p>58° edición en el Predio del Trigo. Recitales nacionales.</p>
-      </div>
-    </div>
-  </div>
-
-  <!-- 1. QUE VISITAR -->
-  <div id="visitar" class="seccion">
-    <div class="seccion-header" onclick="toggle(this)">
-      <span class="emoji">📍</span> ¿Qué visitar en Tres Arroyos? <span class="flecha">▼</span>
-    </div>
-    <div class="seccion-content">
-      <div class="grid-lugares">
-        <div class="card-lugar"><img src="https://www.tresarroyos.gov.ar/wp-content/uploads/2021/05/parque-cabanas-aereo.jpg"><div class="card-body"><h5>🌳 Parque Cabañas</h5><p>50 hectáreas. <b>Sáb y Dom: Feria de Emprendedores 15 a 20hs</b></p></div></div>
-        <div class="card-lugar"><img src="https://www.lu24.com.ar/wp-content/uploads/2023/02/predio-trigo.jpg"><div class="card-body"><h5>🌾 Predio Fiesta Nacional del Trigo</h5><p>Av. Güemes 220</p></div></div>
-        <div class="card-lugar"><img src="https://www.tresarroyos.gov.ar/wp-content/uploads/2021/03/polideportivo.jpg"><div class="card-body"><h5>🏟️ Polideportivo Municipal</h5><p>Av. Moreno 232</p></div></div>
-        <div class="card-lugar"><img src="https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=600"><div class="card-body"><h5>✈️ Aeroclub Tres Arroyos</h5><p>Ruta 228 km 3.5 - Vuelos de bautismo</p></div></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- 2. SERVICIOS -->
-  <div id="servicios" class="seccion">
-    <div class="seccion-header" onclick="toggle(this)">
-      <span class="emoji">🛎️</span> Servicios Turísticos <span class="flecha">▼</span>
-    </div>
-    <div class="seccion-content">
-      <div class="grid-servicios">
-        <div class="mini-card" onclick="mostrar('alojamiento')"><span class="emoji">🏨</span><h4>Alojamiento</h4></div>
-        <div class="mini-card" onclick="mostrar('gastronomia')"><span class="emoji">🍽️</span><h4>Gastronomía</h4></div>
-        <div class="mini-card" onclick="mostrar('balnearios')"><span class="emoji">🏖️</span><h4>Balnearios</h4></div>
-        <div class="mini-card" onclick="mostrar('actividades')"><span class="emoji">🚴</span><h4>Actividades</h4></div>
-      </div>
-
-      <div id="alojamiento" class="bloque-servicio" style="display:none">
-        <h3 style="color:#0056b3;margin-bottom:15px">🏨 Hoteles Reales</h3>
-        <div class="grid-lugares">
-          <div class="card-lugar"><img src="https://images.unsplash.com/photo-1566073771259-6a8506099945?w=600"><div class="card-body"><h5>Los Silos Hotel</h5><p>San Lorenzo 944</p></div></div>
-          <div class="card-lugar"><img src="https://images.unsplash.com/photo-1551882547-ff40c63fe5fa?w=600"><div class="card-body"><h5>Hotel Pergamino</h5><p>3 estrellas. Con pileta</p></div></div>
-          <div class="card-lugar"><img src="https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=600"><div class="card-body"><h5>Hotel Plaza</h5><p>Chacabuco 443</p></div></div>
-          <div class="card-lugar"><img src="https://images.unsplash.com/photo-1610641818989-c2051b5e2cfd?w=600"><div class="card-body"><h5>Elegance Hotel</h5><p>RN3 494</p></div></div>
+  <!-- BALNEARIOS CON FOTOS -->
+  <section id="balnearios">
+    <h2 class="titulo-seccion">Nuestros Balnearios</h2>
+    <div class="grid-4">
+      <div class="card">
+        <img src="https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=600">
+        <div class="card-body">
+          <h3>Claromecó</h3>
+          <p>A 78km. Faro, playas amplias y centro comercial. Destino familiar por excelencia.</p>
+          <a href="#" class="btn">Ver más</a>
         </div>
       </div>
-
-    </div>
-  </div>
-
-  <!-- 3. QUE HACER -->
-  <div id="hacer" class="seccion">
-    <div class="seccion-header" onclick="toggle(this)">
-      <span class="emoji">🎉</span> ¿Qué hacer? <span class="flecha">▼</span>
-    </div>
-    <div class="seccion-content">
-      <div class="grid-lugares">
-        <div class="card-lugar"><img src="https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=600"><div class="card-body"><h5>✈️ Vuelo de Bautismo</h5><p>Aeroclub Ruta 228 km 3.5</p></div></div>
-        <div class="card-lugar"><img src="https://www.tresarroyos.gov.ar/wp-content/uploads/2021/05/parque-cabanas-aereo.jpg"><div class="card-body"><h5>🛍️ Feria de Emprendedores</h5><p>Sáb y Dom en Parque Cabañas</p></div></div>
+      <div class="card">
+        <img src="https://images.unsplash.com/photo-1505144808419-1957a94ca61e?w=600">
+        <div class="card-body">
+          <h3>Reta</h3>
+          <p>A 55km. Paraíso del surf y kitesurf. Naturaleza virgen y médanos.</p>
+          <a href="#" class="btn">Ver más</a>
+        </div>
+      </div>
+      <div class="card">
+        <img src="https://images.unsplash.com/photo-1505142468610-359e7d316be0?w=600">
+        <div class="card-body">
+          <h3>Orense</h3>
+          <p>A 40km. Tranquilo y familiar. Camping Municipal y pesca.</p>
+          <a href="#" class="btn">Ver más</a>
+        </div>
+      </div>
+      <div class="card">
+        <img src="https://images.unsplash.com/photo-1502680390469-be75c86b636f?w=600">
+        <div class="card-body">
+          <h3>Marisol</h3>
+          <p>A 60km. Médanos y playa virgen. Ideal para descanso.</p>
+          <a href="#" class="btn">Ver más</a>
+        </div>
       </div>
     </div>
-  </div>
+  </section>
 
-  <!-- 4. COMO LLEGAR -->
-  <div id="llegar" class="seccion">
-    <div class="seccion-header" onclick="toggle(this)">
-      <span class="emoji">🗺️</span> ¿Cómo llegar? <span class="flecha">▼</span>
-    </div>
-    <div class="seccion-content">
-      <div class="mapa">
-        <iframe src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d51091.123!2d-60.271!3d-38.377!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x958f475d0c0b5e3d%3A0x123456!2sTres%20Arroyos%2C%20Buenos%20Aires!5e0!3m2!1ses!2sar!4v1" allowfullscreen loading="lazy"></iframe>
+  <!-- LUGARES EMBLEMATICOS -->
+  <section id="hacer" style="margin-top:60px">
+    <h2 class="titulo-seccion">Lugares Emblemáticos</h2>
+    <div class="grid-4">
+      <div class="card">
+        <img src="https://www.tresarroyos.gov.ar/wp-content/uploads/2021/05/parque-cabanas-aereo.jpg">
+        <div class="card-body">
+          <h3>Parque Cabañas</h3>
+          <p>50 hectáreas. <b>Sáb y Dom: Feria de Emprendedores 15 a 20hs</b></p>
+        </div>
+      </div>
+      <div class="card">
+        <img src="https://www.lu24.com.ar/wp-content/uploads/2023/02/predio-trigo.jpg">
+        <div class="card-body">
+          <h3>Predio Fiesta del Trigo</h3>
+          <p>Escenario del evento más grande del país. Av. Güemes 220</p>
+        </div>
+      </div>
+      <div class="card">
+        <img src="https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=600">
+        <div class="card-body">
+          <h3>Aeroclub Tres Arroyos</h3>
+          <p>Vuelos de bautismo. Ruta 228 km 3.5</p>
+        </div>
+      </div>
+      <div class="card">
+        <img src="https://www.tresarroyos.gov.ar/wp-content/uploads/2021/06/museo-mulazzi.jpg">
+        <div class="card-body">
+          <h3>Museo Mulazzi</h3>
+          <p>Historia y arte de la ciudad. Av. Moreno 232</p>
+        </div>
       </div>
     </div>
-  </div>
+  </section>
+
+  <!-- EVENTOS -->
+  <section id="eventos" style="margin-top:60px">
+    <h2 class="titulo-seccion">Eventos Próximos</h2>
+    <div class="evento">
+      <img src="https://www.tresarroyos.gov.ar/wp-content/uploads/2021/05/parque-cabanas-aereo.jpg">
+      <div>
+        <span class="fecha-evento">Todos los fines de semana</span>
+        <h3>Feria de Emprendedores</h3>
+        <p>Parque Cabañas de 15 a 20hs. Artesanías, gastronomía y música en vivo.</p>
+      </div>
+    </div>
+    <div class="evento">
+      <img src="https://www.lu24.com.ar/wp-content/uploads/2023/02/predio-trigo.jpg">
+      <div>
+        <span class="fecha-evento">Febrero 2026</span>
+        <h3>58° Fiesta Nacional del Trigo</h3>
+        <p>Predio del Trigo. Recitales nacionales y exposición agroindustrial.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- DONDE DORMIR -->
+  <section id="dormir" style="margin-top:60px">
+    <h2 class="titulo-seccion">Dónde Dormir</h2>
+    <div class="grid-4">
+      <div class="card"><img src="https://images.unsplash.com/photo-1566073771259-6a8506099945?w=600"><div class="card-body"><h3>Los Silos Hotel</h3><p>San Lorenzo 944</p></div></div>
+      <div class="card"><img src="https://images.unsplash.com/photo-1551882547-ff40c63fe5fa?w=600"><div class="card-body"><h3>Hotel Pergamino</h3><p>3 estrellas con pileta</p></div></div>
+      <div class="card"><img src="https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=600"><div class="card-body"><h3>Hotel Plaza</h3><p>Chacabuco 443</p></div></div>
+      <div class="card"><img src="https://images.unsplash.com/photo-1610641818989-c2051b5e2cfd?w=600"><div class="card-body"><h3>Elegance Hotel</h3><p>RN3 494</p></div></div>
+    </div>
+  </section>
 
 </div>
 
 <footer>
-  <p><b>Turismo Tres Arroyos</b></p>
+  <p><b>Dirección de Turismo - Municipalidad de Tres Arroyos</b></p>
+  <p>Av. San Martín 295 - Tel: 02983-431234</p>
   <p>© 2026 - Acción Social 3A</p>
 </footer>
 
 <script>
-// FARMACIA DE TURNO - EDITAR ESTO TODOS LOS DIAS
-const farmaciaHoy = {
-  nombre: "Farmacia Central",
-  direccion: "Av. San Martín 400 - Tel: 02983-422111"
-};
-document.getElementById('farmaciaNombre').innerText = farmaciaHoy.nombre;
-document.getElementById('farmaciaDir').innerText = farmaciaHoy.direccion;
+// Carrusel
+let i=0; const s=document.querySelectorAll('.slide');
+setInterval(()=>{s[i].classList.remove('active');i=(i+1)%s.length;s[i].classList.add('active')},4000);
 
-let slideIndex = 0;
-const slides = document.querySelectorAll('.slide');
-const puntos = document.querySelectorAll('.punto');
-function mostrarSlide(n){slides.forEach(s=>s.classList.remove('active'));puntos.forEach(p=>p.classList.remove('active'));slides[n].classList.add('active');puntos[n].classList.add('active')}
-function siguienteSlide(){slideIndex = (slideIndex + 1) % slides.length;mostrarSlide(slideIndex)}
-function irSlide(n){slideIndex = n;mostrarSlide(slideIndex)}
-setInterval(siguienteSlide, 4000);
-function toggle(el){el.parentElement.classList.toggle('active')}
-function mostrar(id){document.querySelectorAll('.bloque-servicio').forEach(b=>b.style.display='none');document.getElementById(id).style.display='block'}
-
-// Scroll suave al clickear menu
-document.querySelectorAll('.menu-item').forEach(a=>{
-  a.addEventListener('click', function(e){
-    e.preventDefault();
-    document.querySelector(this.getAttribute('href')).scrollIntoView({behavior:'smooth'});
-  })
-})
+// Farmacia - EDITAR ACA
+document.getElementById('farmaciaNombre').innerText = "Farmacia Central";
+document.getElementById('farmaciaDir').innerText = "Av. San Martín 400 - Tel: 02983-422111";
 </script>
 
 </body>
