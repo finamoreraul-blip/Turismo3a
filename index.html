@@ -1,172 +1,229 @@
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Turismo Tres Arroyos</title>
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+<title>Turismo Tres Arroyos - Oficial</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700;800&display=swap" rel="stylesheet">
 <style>
   *{margin:0;padding:0;box-sizing:border-box;font-family:'Poppins',sans-serif}
-  body{background:#f5f7fa;color:#333}
- .hero{height:50vh;background:linear-gradient(rgba(0,0,0,.4),rgba(0,0,0,.4)), url('https://upload.wikimedia.org/wikipedia/commons/8/8e/Plaza_San_Martin_Tres_Arroyos.jpg') center/cover no-repeat;display:flex;align-items:center;justify-content:center;text-align:center;color:white;flex-direction:column}
- .hero h1{font-size:2.5em;font-weight:700}
- .buscador{width:90%;max-width:700px;margin:20px auto;background:white;padding:15px;border-radius:50px;box-shadow:0 4px 20px rgba(0,0,0,.2);display:flex;align-items:center}
- .buscador input{border:none;outline:none;width:100%;font-size:1.1em;padding:5px 15px;background:transparent}
- .buscador button{background:#0056b3;color:white;border:none;padding:12px 20px;border-radius:50px;cursor:pointer;font-weight:600}
- .filtros{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-bottom:20px}
- .filtro-btn{padding:8px 15px;border:2px solid #0056b3;background:white;color:#0056b3;border-radius:20px;cursor:pointer;font-weight:600}
- .filtro-btn.active{background:#0056b3;color:white}
- .container{max-width:1000px;margin:0 auto;padding:20px}
- .acordeon{margin-top:20px}
- .item{background:white;border-radius:12px;margin-bottom:15px;box-shadow:0 4px 12px rgba(0,0,0,.1);overflow:hidden}
- .item-header{padding:20px;font-size:1.3em;font-weight:600;background:#0056b3;color:white;cursor:pointer;display:flex;justify-content:space-between}
- .item-header:hover{background:#004494}
- .item-content{display:none;padding:20px;background:#fafafa}
- .item.active.item-content{display:block}
- .flecha{transition:.3s}
- .item.active.flecha{transform:rotate(180deg)}
- .sub-item{background:white;border-radius:8px;margin:10px 0;border:1px solid #ddd;overflow:hidden}
- .sub-header{padding:15px;font-weight:600;cursor:pointer;display:flex;justify-content:space-between;background:#f0f0f0}
- .sub-content{display:none;padding:15px}
- .sub-item.active.sub-content{display:block}
- .card{background:white;padding:0;border-radius:10px;margin:12px 0;border:1px solid #ddd;overflow:hidden;display:flex;gap:15px;cursor:pointer;transition:.2s}
- .card:hover{transform:scale(1.02);box-shadow:0 4px 15px rgba(0,0,0,.15)}
- .card img{width:120px;height:120px;object-fit:cover}
- .card-body{padding:12px;flex:1}
- .card h4{color:#0056b3;margin-bottom:5px}
- .card p{font-size:.9em;color:#555}
- .card.ubicacion{font-size:.8em;color:#888;margin-top:5px}
- .hidden{display:none!important}
- .seccion-balnearios{background:#e8f4ff;padding:15px;border-radius:8px;margin-top:15px;border-left:4px solid #0056b3}
- .seccion-balnearios h3{color:#0056b3;margin-bottom:10px}
- .modal{display:none;position:fixed;z-index:1000;left:0;top:0;width:100%;height:100%;background:rgba(0,0,0,.7);overflow-y:auto}
- .modal-content{background:white;margin:5% auto;padding:0;border-radius:12px;width:90%;max-width:600px}
- .modal-header{position:relative}
- .modal-header img{width:100%;height:250px;object-fit:cover;border-radius:12px 12px 0 0}
- .close{position:absolute;top:10px;right:20px;color:white;font-size:35px;font-weight:bold;cursor:pointer;text-shadow:2px 2px 5px black}
- .modal-body{padding:20px}
- .modal-body h2{color:#0056b3;margin-bottom:10px}
- .btn-wa{display:inline-block;background:#25D366;color:white;padding:10px 20px;border-radius:8px;text-decoration:none;margin-top:10px;font-weight:600}
- .mapa iframe{width:100%;height:400px;border:0;border-radius:12px}
-  footer{background:#222;color:white;text-align:center;padding:30px;margin-top:40px}
-  @media(max-width:600px){.card{flex-direction:column}.card img{width:100%;height:180px}}
+  body{background:#f0f4f8;color:#333}
+  
+  .hero{
+    height:80vh;
+    background:linear-gradient(rgba(0,0,0,.5),rgba(0,0,0,.5)), url('https://upload.wikimedia.org/wikipedia/commons/8/8e/Plaza_San_Martin_Tres_Arroyos.jpg') center/cover fixed no-repeat;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;color:white
+  }
+  .hero h1{font-size:3.5em;font-weight:800;text-shadow:3px 3px 15px rgba(0,0,0,.7)}
+  .hero p{font-size:1.4em;margin-top:10px;font-weight:300}
+  
+  .container{max-width:1100px;margin:0 auto;padding:30px 20px}
+  
+  /* SECCIONES PRINCIPALES ESTILO NECOCHEA */
+  .seccion{
+    background:white;border-radius:18px;margin:25px 0;box-shadow:0 6px 20px rgba(0,0,0,.08);overflow:hidden
+  }
+  .seccion-header{
+    padding:28px;font-size:1.6em;font-weight:700;background:linear-gradient(135deg,#0056b3,#0077cc);color:white;cursor:pointer;display:flex;align-items:center;gap:18px
+  }
+  .seccion-header:hover{opacity:.9}
+  .seccion-content{display:none;padding:30px;background:#fdfdfd}
+  .seccion.active .seccion-content{display:block}
+  .emoji{font-size:2em}
+  .flecha{margin-left:auto;font-size:1.3em;transition:.3s}
+  .seccion.active .flecha{transform:rotate(180deg)}
+  
+  /* GRID DE SERVICIOS CON EMOJIS */
+  .grid-servicios{
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:18px;margin:25px 0
+  }
+  .mini-card{
+    background:linear-gradient(135deg,#fff,#f8f9fa);border:2px solid #e0e0e0;border-radius:15px;padding:25px 15px;text-align:center;cursor:pointer;transition:.3s
+  }
+  .mini-card:hover{background:linear-gradient(135deg,#0056b3,#0077cc);color:white;border-color:#0056b3;transform:translateY(-5px);box-shadow:0 8px 20px rgba(0,86,179,.3)}
+  .mini-card .emoji{font-size:3em;display:block;margin-bottom:10px}
+  .mini-card h4{font-size:1em;font-weight:600}
+  
+  /* CARDS DE LUGARES */
+  .grid-lugares{
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px
+  }
+  .card-lugar{
+    background:white;border-radius:12px;overflow:hidden;box-shadow:0 3px 10px rgba(0,0,0,.1);cursor:pointer;transition:.3s
+  }
+  .card-lugar:hover{transform:scale(1.03)}
+  .card-lugar img{width:100%;height:180px;object-fit:cover}
+  .card-body{padding:15px}
+  .card-body h5{color:#0056b3;font-size:1.1em;margin-bottom:5px}
+  .card-body p{font-size:.9em;color:#666}
+  .tag{display:inline-block;background:#0056b3;color:white;padding:4px 10px;border-radius:15px;font-size:.75em;margin-top:8px}
+  
+  .mapa iframe{width:100%;height:450px;border:0;border-radius:15px;box-shadow:0 4px 15px rgba(0,0,0,.1)}
+  
+  footer{background:#1a1a1a;color:white;text-align:center;padding:40px;margin-top:50px}
+  footer p{margin:5px 0}
 </style>
 </head>
 <body>
 
 <div class="hero">
-  <h1>Turismo Tres Arroyos</h1>
-  <div class="buscador">
-    <input type="text" id="buscador" placeholder="🔍 Busca: alojamiento, restaurante, club...">
-    <button onclick="buscar()">Buscar</button>
-  </div>
+  <h1>Tres Arroyos</h1>
+  <p>El Corazón Productivo del Sudeste Bonaerense</p>
 </div>
 
 <div class="container">
-  <div class="filtros">
-    <button class="filtro-btn active" onclick="filtrar('todos')">Todos</button>
-    <button class="filtro-btn" onclick="filtrar('alojamiento')">🏨 Alojamiento</button>
-    <button class="filtro-btn" onclick="filtrar('gastronomia')">🍽️ Gastronomía</button>
-    <button class="filtro-btn" onclick="filtrar('club')">⚽ Clubes</button>
-    <button class="filtro-btn" onclick="filtrar('balneario')">🏖️ Balnearios</button>
+
+  <!-- 1. QUE VISITAR -->
+  <div class="seccion">
+    <div class="seccion-header" onclick="toggle(this)">
+      <span class="emoji">📍</span> ¿Qué visitar en Tres Arroyos? <span class="flecha">▼</span>
+    </div>
+    <div class="seccion-content">
+      <div class="grid-lugares">
+        <div class="card-lugar"><img src="https://www.tresarroyos.gov.ar/wp-content/uploads/2021/05/parque-cabanas-aereo.jpg"><div class="card-body"><h5>🌳 Parque Cabañas</h5><p>Pulmón verde de 50 hectáreas. Parrillas, juegos, bicisenda y laguna. Entrada libre.</p><span class="tag">Naturaleza</span></div></div>
+        <div class="card-lugar"><img src="https://www.lu24.com.ar/wp-content/uploads/2023/02/predio-trigo.jpg"><div class="card-body"><h5>🌾 Predio Fiesta Nacional del Trigo</h5><p>Escenario de la fiesta más importante del país. Recitales y exposiciones todo el año.</p><span class="tag">Eventos</span></div></div>
+        <div class="card-lugar"><img src="https://www.tresarroyos.gov.ar/wp-content/uploads/2021/03/polideportivo.jpg"><div class="card-body"><h5>🏟️ Polideportivo Municipal</h5><p>Pileta olímpica climatizada, gimnasio y canchas. Abierto todo el año.</p><span class="tag">Deportes</span></div></div>
+        <div class="card-lugar"><img src="https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=600"><div class="card-body"><h5>🏭 Parque Industrial</h5><p>Más de 100 empresas. Motor productivo de la región.</p><span class="tag">Industria</span></div></div>
+        <div class="card-lugar"><img src="https://upload.wikimedia.org/wikipedia/commons/8/8e/Plaza_San_Martin_Tres_Arroyos.jpg"><div class="card-body"><h5>⛲ Plaza San Martín</h5><p>Plaza central. Monumento, ferias y punto de encuentro.</p><span class="tag">Centro</span></div></div>
+        <div class="card-lugar"><img src="https://www.tresarroyos.gov.ar/wp-content/uploads/2021/06/museo-mulazzi.jpg"><div class="card-body"><h5>🏛️ Museo Mulazzi</h5><p>Historia, arte y cultura de Tres Arroyos. Entrada gratuita.</p><span class="tag">Cultura</span></div></div>
+      </div>
+    </div>
   </div>
 
-  <div class="acordeon" id="resultados">
-
-    <!-- NUEVA SECCION CLUBES -->
-    <div class="item"><div class="item-header" onclick="toggle(this)">⚽ Clubes de Tres Arroyos <span class="flecha">▼</span></div>
-      <div class="item-content">
-        <div class="card" onclick="abrirModal('club_nacional')" data-tags="club futbol nacional"><img src="https://media.lacapital.com.ar/p/f7a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5/adaptive/690x460/1.jpg"><div class="card-body"><h4>Club Atlético El Nacional</h4><p>Fútbol - Básquet - Hockey</p><p class="ubicacion">📍 Av. Libertad 345</p></div></div>
-        <div class="card" onclick="abrirModal('club_huracan')" data-tags="club futbol huracan"><img src="https://www.clubhuracanta.com.ar/wp-content/uploads/2020/08/cancha.jpg"><div class="card-body"><h4>Club Huracán</h4><p>Fútbol - Pileta - Quinchos</p><p class="ubicacion">📍 Barrio Norte</p></div></div>
-        <div class="card" onclick="abrirModal('club_acdc')" data-tags="club basquet acdc"><img src="https://www.acdcbasquet.com.ar/wp-content/uploads/2021/05/estadio.jpg"><div class="card-body"><h4>ACDC - Asociación Civil de Deportes</h4><p>Básquet - Voley - Gimnasio</p><p class="ubicacion">📍 Av. San Martín 1200</p></div></div>
-        <div class="card" onclick="abrirModal('club_colegiales')" data-tags="club futbol colegiales"><img src="https://www.clubatleticocolegiales.com.ar/wp-content/uploads/2022/03/cancha-principal.jpg"><div class="card-body"><h4>Club Atlético Colegiales</h4><p>Fútbol - Bochas - Tenis</p><p class="ubicacion">📍 Av. Uruguay 580</p></div></div>
-        <div class="card" onclick="abrirModal('club_olimpo')" data-tags="club futbol olimpo"><img src="https://www.olimpo.com.ar/wp-content/uploads/2023/01/estadio-roberto-carminatti.jpg"><div class="card-body"><h4>Club Olimpo</h4><p>Fútbol - Hockey - Patín</p><p class="ubicacion">📍 Av. Colón 150</p></div></div>
-        <div class="card" onclick="abrirModal('club_villa')" data-tags="club futbol villa"><img src="https://www.villanueva.com.ar/wp-content/uploads/2021/09/cancha.jpg"><div class="card-body"><h4>Club Villa Nueva</h4><p>Fútbol - Básquet - Pileta</p><p class="ubicacion">📍 Barrio Villa Nueva</p></div></div>
-      </div>
+  <!-- 2. SERVICIOS -->
+  <div class="seccion">
+    <div class="seccion-header" onclick="toggle(this)">
+      <span class="emoji">🛎️</span> Servicios Turísticos <span class="flecha">▼</span>
     </div>
+    <div class="seccion-content">
+      <p style="margin-bottom:20px;text-align:center;color:#666">Elegí una categoría para ver todas las opciones</p>
+      
+      <div class="grid-servicios">
+        <div class="mini-card" onclick="mostrar('alojamiento')"><span class="emoji">🏨</span><h4>Alojamiento</h4></div>
+        <div class="mini-card" onclick="mostrar('gastronomia')"><span class="emoji">🍽️</span><h4>Gastronomía</h4></div>
+        <div class="mini-card" onclick="mostrar('balnearios')"><span class="emoji">🏖️</span><h4>Balnearios</h4></div>
+        <div class="mini-card" onclick="mostrar('inmobiliaria')"><span class="emoji">🏠</span><h4>Inmobiliarias</h4></div>
+        <div class="mini-card" onclick="mostrar('actividades')"><span class="emoji">🚴</span><h4>Actividades</h4></div>
+        <div class="mini-card" onclick="mostrar('complejos')"><span class="emoji">🏊</span><h4>Complejos</h4></div>
+        <div class="mini-card" onclick="mostrar('transporte')"><span class="emoji">🚗</span><h4>Transporte</h4></div>
+        <div class="mini-card" onclick="mostrar('farmacia')"><span class="emoji">💊</span><h4>Farmacias</h4></div>
+        <div class="mini-card" onclick="mostrar('telefonos')"><span class="emoji">📞</span><h4>Tel. Útiles</h4></div>
+      </div>
 
-    <!-- SERVICIOS -->
-    <div class="item"><div class="item-header" onclick="toggle(this)">Servicios <span class="flecha">▼</span></div>
-      <div class="item-content">
-
-        <div class="sub-item"><div class="sub-header" onclick="toggleSub(this)">🏨 Alojamiento en Tres Arroyos <span>▼</span></div>
-          <div class="sub-content">
-            <div class="card" onclick="abrirModal('hotel_espana')" data-tags="alojamiento hotel"><img src="https://images.unsplash.com/photo-1566073771259-6a8506099945?w=400"><div class="card-body"><h4>Hotel España</h4><p>3 estrellas. Desayuno incluido</p><p class="ubicacion">📍 Av. San Martín 580</p></div></div>
-            <div class="card" onclick="abrirModal('hotel_plaza')" data-tags="alojamiento hotel"><img src="https://images.unsplash.com/photo-1551882547-ff40c63fe5fa?w=400"><div class="card-body"><h4>Hotel Plaza</h4><p>Frente a Plaza San Martín</p><p class="ubicacion">📍 Av. Casey 200</p></div></div>
-            <div class="card" onclick="abrirModal('cabanas_sol')" data-tags="alojamiento cabañas"><img src="https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=400"><div class="card-body"><h4>Cabañas El Sol</h4><p>Con pileta y parrilla</p><p class="ubicacion">📍 Ruta 228 km 5</p></div></div>
-            <div class="seccion-balnearios"><h3>🏖️ Alojamientos en Balnearios</h3>
-              <div class="card" onclick="abrirModal('cab_claromeco')" data-tags="alojamiento balneario claromeco"><img src="https://images.unsplash.com/photo-1610641818989-c2051b5e2cfd?w=400"><div class="card-body"><h4>Cabañas Claromecó</h4><p>Frente al mar</p><p class="ubicacion">📍 Claromecó - 78km</p></div></div>
-              <div class="card" onclick="abrirModal('hotel_reta')" data-tags="alojamiento balneario reta"><img src="https://images.unsplash.com/photo-1571896349842-33c89424de2d?w=400"><div class="card-body"><h4>Hotel Reta</h4><p>A 2 cuadras de la playa</p><p class="ubicacion">📍 Reta - 55km</p></div></div>
-              <div class="card" onclick="abrirModal('camping_orense')" data-tags="alojamiento balneario orense camping"><img src="https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?w=400"><div class="card-body"><h4>Camping Orense</h4><p>Camping municipal</p><p class="ubicacion">📍 Orense - 40km</p></div></div>
-            </div>
-          </div>
+      <!-- ALOJAMIENTO -->
+      <div id="alojamiento" class="bloque-servicio" style="display:none">
+        <h3 style="color:#0056b3;margin-bottom:15px">🏨 Alojamiento en Tres Arroyos</h3>
+        <div class="grid-lugares">
+          <div class="card-lugar"><img src="https://images.unsplash.com/photo-1566073771259-6a8506099945?w=600"><div class="card-body"><h5>Hotel España</h5><p>3 Estrellas. Av. San Martín 580. Tel: 02983-430500</p><span class="tag">Centro</span></div></div>
+          <div class="card-lugar"><img src="https://images.unsplash.com/photo-1551882547-ff40c63fe5fa?w=600"><div class="card-body"><h5>Hotel Plaza</h5><p>Frente Plaza San Martín. Av. Casey 200. Tel: 02983-431000</p><span class="tag">Céntrico</span></div></div>
+          <div class="card-lugar"><img src="https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=600"><div class="card-body"><h5>Cabañas El Sol</h5><p>Ruta 228 km 5. Pileta y parrilla. Tel: 02983-432000</p><span class="tag">Cabañas</span></div></div>
         </div>
-
-        <div class="sub-item"><div class="sub-header" onclick="toggleSub(this)">🍽️ Gastronomía <span>▼</span></div>
-          <div class="sub-content">
-            <div class="card" onclick="abrirModal('la_cabana')" data-tags="gastronomia parrilla"><img src="https://images.unsplash.com/photo-1554679665-f5537f187268?w=400"><div class="card-body"><h4>La Cabaña</h4><p>Parrilla tradicional</p><p class="ubicacion">📍 Av. San Martín 850</p></div></div>
-            <div class="card" onclick="abrirModal('el_hornero')" data-tags="gastronomia pizzeria"><img src="https://images.unsplash.com/photo-1513104890138-7c749659a591?w=400"><div class="card-body"><h4>Pizzería El Hornero</h4><p>Pizzas a la piedra</p><p class="ubicacion">📍 Av. Libertad 420</p></div></div>
-            <div class="card" onclick="abrirModal('cafe_centro')" data-tags="gastronomia cafe"><img src="https://images.unsplash.com/photo-1495474472287-4ce0bda2c4b2?w=400"><div class="card-body"><h4>Café del Centro</h4><p>Cafetería y pastelería</p><p class="ubicacion">📍 Av. Casey 230</p></div></div>
-          </div>
+        <h3 style="color:#0056b3;margin:25px 0 15px 0">🏖️ Alojamiento en Balnearios</h3>
+        <div class="grid-lugares">
+          <div class="card-lugar"><img src="https://images.unsplash.com/photo-1610641818989-c2051b5e2cfd?w=600"><div class="card-body"><h5>Cabañas Claromecó</h5><p>Frente al mar. 78km de Tres Arroyos</p></div></div>
+          <div class="card-lugar"><img src="https://images.unsplash.com/photo-1571896349842-33c89424de2d?w=600"><div class="card-body"><h5>Hotel Reta</h5><p>A 2 cuadras de la playa. 55km</p></div></div>
+          <div class="card-lugar"><img src="https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?w=600"><div class="card-body"><h5>Camping Orense</h5><p>Municipal. Luz y parrillas. 40km</p></div></div>
         </div>
-
       </div>
-    </div>
 
-    <!-- BALNEARIOS -->
-    <div class="item"><div class="item-header" onclick="toggle(this)">🏖️ Balnearios <span class="flecha">▼</span></div>
-      <div class="item-content">
-        <div class="card" onclick="abrirModal('claromeco')" data-tags="balneario claromeco"><img src="https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=400"><div class="card-body"><h4>Claromecó</h4><p>78km. Faro y playas amplias</p></div></div>
-        <div class="card" onclick="abrirModal('reta')" data-tags="balneario reta"><img src="https://images.unsplash.com/photo-1505144808419-1957a94ca61e?w=400"><div class="card-body"><h4>Reta</h4><p>55km. Surf y kitesurf</p></div></div>
-        <div class="card" onclick="abrirModal('orense')" data-tags="balneario orense"><img src="https://images.unsplash.com/photo-1505142468610-359e7d316be0?w=400"><div class="card-body"><h4>Orense</h4><p>40km. Familiar</p></div></div>
-        <div class="card" onclick="abrirModal('marisol')" data-tags="balneario marisol"><img src="https://images.unsplash.com/photo-1502680390469-be75c86b636f?w=400"><div class="card-body"><h4>Marisol</h4><p>60km. Médanos</p></div></div>
+      <!-- GASTRONOMIA -->
+      <div id="gastronomia" class="bloque-servicio" style="display:none">
+        <h3 style="color:#0056b3;margin-bottom:15px">🍽️ Gastronomía</h3>
+        <div class="grid-lugares">
+          <div class="card-lugar"><img src="https://images.unsplash.com/photo-1554679665-f5537f187268?w=600"><div class="card-body"><h5>La Cabaña</h5><p>Parrilla tradicional. Av. San Martín 850</p></div></div>
+          <div class="card-lugar"><img src="https://images.unsplash.com/photo-1513104890138-7c749659a591?w=600"><div class="card-body"><h5>Pizzería El Hornero</h5><p>Pizzas a la piedra. Av. Libertad 420</p></div></div>
+          <div class="card-lugar"><img src="https://images.unsplash.com/photo-1495474472287-4ce0bda2c4b2?w=600"><div class="card-body"><h5>Café del Centro</h5><p>Cafetería y pastelería. Av. Casey 230</p></div></div>
+        </div>
       </div>
-    </div>
 
+      <!-- BALNEARIOS -->
+      <div id="balnearios" class="bloque-servicio" style="display:none">
+        <h3 style="color:#0056b3;margin-bottom:15px">🏖️ Nuestros Balnearios</h3>
+        <div class="grid-lugares">
+          <div class="card-lugar"><img src="https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=600"><div class="card-body"><h5>Claromecó</h5><p>78km. Faro, playas amplias y pesca</p></div></div>
+          <div class="card-lugar"><img src="https://images.unsplash.com/photo-1505144808419-1957a94ca61e?w=600"><div class="card-body"><h5>Reta</h5><p>55km. Surf, kitesurf y naturaleza</p></div></div>
+          <div class="card-lugar"><img src="https://images.unsplash.com/photo-1505142468610-359e7d316be0?w=600"><div class="card-body"><h5>Orense</h5><p>40km. Familiar y tranquilo</p></div></div>
+          <div class="card-lugar"><img src="https://images.unsplash.com/photo-1502680390469-be75c86b636f?w=600"><div class="card-body"><h5>Marisol</h5><p>60km. Médanos y playa virgen</p></div></div>
+        </div>
+      </div>
+
+      <!-- FARMACIAS -->
+      <div id="farmacia" class="bloque-servicio" style="display:none">
+        <h3 style="color:#0056b3;margin-bottom:15px">💊 Farmacias</h3>
+        <div class="grid-lugares">
+          <div class="card-lugar"><img src="https://images.unsplash.com/photo-1471864190281-a93a3070b6de?w=600"><div class="card-body"><h5>Farmacia Central</h5><p>Av. San Martín 400 - 02983-422111</p></div></div>
+          <div class="card-lugar"><img src="https://images.unsplash.com/photo-1587854692152-cbe660dbde88?w=600"><div class="card-body"><h5>Farmacia del Pueblo</h5><p>Av. Casey 300 - 02983-431500</p></div></div>
+          <div class="card-lugar"><img src="https://images.unsplash.com/photo-1559757148-5c350d0d3c56?w=600"><div class="card-body"><h5>Farmacia 24hs</h5><p>Av. Libertad 800 - 02983-433000</p></div></div>
+        </div>
+      </div>
+
+      <!-- INMOBILIARIAS -->
+      <div id="inmobiliaria" class="bloque-servicio" style="display:none">
+        <h3 style="color:#0056b3;margin-bottom:15px">🏠 Inmobiliarias</h3>
+        <div class="grid-lugares">
+          <div class="card-lugar"><img src="https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=600"><div class="card-body"><h5>Inmobiliaria Tres Arroyos</h5><p>Av. Casey 300 - Alquileres temporarios</p></div></div>
+          <div class="card-lugar"><img src="https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=600"><div class="card-body"><h5>Inmobiliaria del Centro</h5><p>Av. San Martín 450 - Venta y alquiler</p></div></div>
+        </div>
+      </div>
+
+      <!-- TELEFONOS -->
+      <div id="telefonos" class="bloque-servicio" style="display:none">
+        <h3 style="color:#0056b3;margin-bottom:15px">📞 Teléfonos Útiles</h3>
+        <div class="grid-lugares">
+          <div class="card-lugar"><img src="https://images.unsplash.com/photo-1582750433449-648ed127bb54?w=600"><div class="card-body"><h5>Hospital Pirovano</h5><p>02983-430700 - Urgencias 24hs</p></div></div>
+          <div class="card-lugar"><img src="https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=600"><div class="card-body"><h5>Municipalidad</h5><p>02983-430300 - Av. San Martín 295</p></div></div>
+          <div class="card-lugar"><img src="https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=600"><div class="card-body"><h5>Terminal de Ómnibus</h5><p>02983-431200 - Ruta 3 km 490</p></div></div>
+        </div>
+      </div>
+
+    </div>
   </div>
+
+  <!-- 3. QUE HACER -->
+  <div class="seccion">
+    <div class="seccion-header" onclick="toggle(this)">
+      <span class="emoji">🎉</span> ¿Qué hacer? <span class="flecha">▼</span>
+    </div>
+    <div class="seccion-content">
+      <div class="grid-lugares">
+        <div class="card-lugar"><img src="https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=600"><div class="card-body"><h5>🎣 Pesca Deportiva</h5><p>En Reta y Orense. Pejerrey y corvina todo el año.</p></div></div>
+        <div class="card-lugar"><img src="https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=600"><div class="card-body"><h5>🚴 Cicloturismo</h5><p>Circuito Parque Cabañas - Predio. 8km</p></div></div>
+        <div class="card-lugar"><img src="https://images.unsplash.com/photo-1514320291840-2e0a9bf2a9ae?w=600"><div class="card-body"><h5>🎭 Agenda Cultural</h5><p>Teatro, Museo y eventos mensuales</p></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. COMO LLEGAR -->
+  <div class="seccion">
+    <div class="seccion-header" onclick="toggle(this)">
+      <span class="emoji">🗺️</span> ¿Cómo llegar? <span class="flecha">▼</span>
+    </div>
+    <div class="seccion-content">
+      <p style="margin-bottom:20px">Tres Arroyos se encuentra sobre la Ruta Nacional N°3, a 490km de CABA, 160km de Bahía Blanca y 180km de Mar del Plata.</p>
+      <div class="mapa">
+        <iframe src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d51091.123!2d-60.271!3d-38.377!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x958f475d0c0b5e3d%3A0x123456!2sTres%20Arroyos%2C%20Buenos%20Aires!5e0!3m2!1ses!2sar!4v1" allowfullscreen loading="lazy"></iframe>
+      </div>
+    </div>
+  </div>
+
 </div>
 
-<div id="modal" class="modal"><div class="modal-content"><div class="modal-header"><span class="close" onclick="cerrarModal()">&times;</span><img id="modalImg" src=""></div><div class="modal-body" id="modalBody"></div></div></div>
-
-<footer><p>© 2026 Turismo Tres Arroyos | Hecho por Acción Social 3A</p></footer>
+<footer>
+  <p><b>Turismo Tres Arroyos</b></p>
+  <p>Dirección de Turismo - Municipalidad de Tres Arroyos</p>
+  <p>© 2026 - Desarrollado por Acción Social 3A</p>
+</footer>
 
 <script>
-function toggle(el){ el.parentElement.classList.toggle('active'); }
-function toggleSub(el){ el.parentElement.classList.toggle('active'); }
-function buscar(){let texto = document.getElementById('buscador').value.toLowerCase();document.querySelectorAll('.card').forEach(card=>{let tags = card.getAttribute('data-tags');let titulo = card.querySelector('h4').innerText.toLowerCase();card.classList.toggle('hidden',!(tags.includes(texto) || titulo.includes(texto) || texto == ""));});}
-function filtrar(categoria){document.querySelectorAll('.filtro-btn').forEach(btn=>btn.classList.remove('active'));event.target.classList.add('active');document.querySelectorAll('.card').forEach(card=>{card.classList.toggle('hidden',!(categoria == 'todos' || card.getAttribute('data-tags').includes(categoria)));});}
-document.getElementById('buscador').addEventListener('keyup', buscar);
+function toggle(el){
+  document.querySelectorAll('.seccion').forEach(s=>s.classList.remove('active'));
+  el.parentElement.classList.toggle('active');
+}
 
-const datos = {
-  // CLUBES - DATOS DE GOOGLE
-  club_nacional: {img: "https://media.lacapital.com.ar/p/f7a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5/adaptive/690x460/1.jpg",titulo: "Club Atlético El Nacional",info: `<p><b>Fundado:</b> 1915</p><p><b>Dirección:</b> Av. Libertad 345</p><p><b>Tel:</b> 02983-431234</p><p><b>Deportes:</b> Fútbol, Básquet, Hockey, Tenis</p><p><b>Descripción:</b> Uno de los clubes más tradicionales de Tres Arroyos. Participa en la Liga Regional de Fútbol.</p><a href="https://wa.me/5492983431234" target="_blank" class="btn-wa">📲 Contacto</a>`},
-  club_huracan: {img: "https://www.clubhuracanta.com.ar/wp-content/uploads/2020/08/cancha.jpg",titulo: "Club Huracán",info: `<p><b>Dirección:</b> Barrio Norte</p><p><b>Tel:</b> 02983-432345</p><p><b>Deportes:</b> Fútbol, Pileta de verano, Quinchos</p><p><b>Servicios:</b> Alquiler de salón para eventos</p><a href="https://wa.me/5492983432345" target="_blank" class="btn-wa">📲 Consultar</a>`},
-  club_acdc: {img: "https://www.acdcbasquet.com.ar/wp-content/uploads/2021/05/estadio.jpg",titulo: "ACDC - Asociación Civil de Deportes",info: `<p><b>Dirección:</b> Av. San Martín 1200</p><p><b>Tel:</b> 02983-433456</p><p><b>Deportes:</b> Básquet, Voley, Gimnasio</p><p><b>Descripción:</b> Referente del básquet en la ciudad. Categorías formativas y primera.</p><a href="https://wa.me/5492983433456" target="_blank" class="btn-wa">📲 Info</a>`},
-  club_colegiales: {img: "https://www.clubatleticocolegiales.com.ar/wp-content/uploads/2022/03/cancha-principal.jpg",titulo: "Club Atlético Colegiales",info: `<p><b>Dirección:</b> Av. Uruguay 580</p><p><b>Tel:</b> 02983-434567</p><p><b>Deportes:</b> Fútbol, Bochas, Tenis</p><p><b>Servicios:</b> Cantina y buffet</p><a href="https://wa.me/5492983434567" target="_blank" class="btn-wa">📲 Contacto</a>`},
-  club_olimpo: {img: "https://www.olimpo.com.ar/wp-content/uploads/2023/01/estadio-roberto-carminatti.jpg",titulo: "Club Olimpo",info: `<p><b>Dirección:</b> Av. Colón 150</p><p><b>Tel:</b> 02983-435678</p><p><b>Deportes:</b> Fútbol, Hockey, Patín</p><p><b>Descripción:</b> Club con gran actividad en hockey femenino.</p><a href="https://wa.me/5492983435678" target="_blank" class="btn-wa">📲 Consultar</a>`},
-  club_villa: {img: "https://www.villanueva.com.ar/wp-content/uploads/2021/09/cancha.jpg",titulo: "Club Villa Nueva",info: `<p><b>Dirección:</b> Barrio Villa Nueva</p><p><b>Tel:</b> 02983-436789</p><p><b>Deportes:</b> Fútbol, Básquet, Pileta</p><p><b>Servicios:</b> Colonia de vacaciones en verano</p><a href="https://wa.me/5492983436789" target="_blank" class="btn-wa">📲 Contacto</a>`},
-
-  hotel_espana: {img: "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800",titulo: "Hotel España",info: `<p><b>⭐ 3 Estrellas</b></p><p><b>Dirección:</b> Av. San Martín 580</p><p><b>Tel:</b> 02983-430500</p><a href="https://wa.me/5492983430500" target="_blank" class="btn-wa">📲 Consultar</a>`},
-  hotel_plaza: {img: "https://images.unsplash.com/photo-1551882547-ff40c63fe5fa?w=800",titulo: "Hotel Plaza",info: `<p><b>Dirección:</b> Av. Casey 200</p><p><b>Tel:</b> 02983-431000</p><a href="https://wa.me/5492983431000" target="_blank" class="btn-wa">📲 Consultar</a>`},
-  cabanas_sol: {img: "https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800",titulo: "Cabañas El Sol",info: `<p><b>Dirección:</b> Ruta 228 km 5</p><p><b>Tel:</b> 02983-432000</p><a href="https://wa.me/5492983432000" target="_blank" class="btn-wa">📲 Consultar</a>`},
-  cab_claromeco: {img: "https://images.unsplash.com/photo-1610641818989-c2051b5e2cfd?w=800",titulo: "Cabañas Claromecó",info: `<p><b>Ubicación:</b> Claromecó - 78km</p><p><b>Tel:</b> 02983-498100</p><a href="https://wa.me/5492983498100" target="_blank" class="btn-wa">📲 Reservar</a>`},
-  hotel_reta: {img: "https://images.unsplash.com/photo-1571896349842-33c89424de2d?w=800",titulo: "Hotel Reta",info: `<p><b>Ubicación:</b> Reta - 55km</p><p><b>Tel:</b> 02983-497200</p><a href="https://wa.me/5492983497200" target="_blank" class="btn-wa">📲 Reservar</a>`},
-  camping_orense: {img: "https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?w=800",titulo: "Camping Orense",info: `<p><b>Ubicación:</b> Orense - 40km</p><p><b>Tel:</b> 02983-496000</p>`},
-
-  la_cabana: {img: "https://images.unsplash.com/photo-1554679665-f5537f187268?w=800",titulo: "La Cabaña",info: `<p><b>Dirección:</b> Av. San Martín 850</p><p><b>Tel:</b> 02983-430000</p><a href="https://wa.me/5492983430000" target="_blank" class="btn-wa">📲 Reservar</a>`},
-  el_hornero: {img: "https://images.unsplash.com/photo-1513104890138-7c749659a591?w=800",titulo: "Pizzería El Hornero",info: `<p><b>Dirección:</b> Av. Libertad 420</p><p><b>Tel:</b> 02983-422222</p><a href="https://wa.me/5492983422222" target="_blank" class="btn-wa">📲 Pedir</a>`},
-  cafe_centro: {img: "https://images.unsplash.com/photo-1495474472287-4ce0bda2c4b2?w=800",titulo: "Café del Centro",info: `<p><b>Dirección:</b> Av. Casey 230</p><p><b>Tel:</b> 02983-429999</p><a href="https://wa.me/5492983429999" target="_blank" class="btn-wa">📲 Pedido</a>`},
-
-  claromeco: {img: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800",titulo: "Balneario Claromecó",info: `<p><b>Distancia:</b> 78km</p><p><b>Características:</b> Faro, playas amplias</p>`},
-  reta: {img: "https://images.unsplash.com/photo-1505144808419-1957a94ca61e?w=800",titulo: "Balneario Reta",info: `<p><b>Distancia:</b> 55km</p><p><b>Características:</b> Surf y Kitesurf</p>`},
-  orense: {img: "https://images.unsplash.com/photo-1505142468610-359e7d316be0?w=800",titulo: "Balneario Orense",info: `<p><b>Distancia:</b> 40km</p><p><b>Características:</b> Familiar</p>`},
-  marisol: {img: "https://images.unsplash.com/photo-1502680390469-be75c86b636f?w=800",titulo: "Balneario Marisol",info: `<p><b>Distancia:</b> 60km</p><p><b>Características:</b> Médanos</p>`}
-};
-
-function abrirModal(id){const data = datos[id];document.getElementById('modalImg').src = data.img;document.getElementById('modalBody').innerHTML = `<h2>${data.titulo}</h2>` + data.info;document.getElementById('modal').style.display = 'block';}
-function cerrarModal(){document.getElementById('modal').style.display = 'none';}
-window.onclick = function(event){if(event.target == document.getElementById('modal')) cerrarModal();}
+function mostrar(id){
+  document.querySelectorAll('.bloque-servicio').forEach(b=>b.style.display='none');
+  document.getElementById(id).style.display='block';
+}
 </script>
 
 </body>
