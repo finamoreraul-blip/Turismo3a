@@ -130,6 +130,7 @@
 
         let isEditing = false;
         let isFetching = false;
+        window.allData = null; // Almacén global de datos de Sheets para evitar rebotes
 
         const CATEGORIES = ['Todos', 'Alimentos', 'Servicios', 'Indumentaria', 'Hogar y Deco', 'Belleza', 'Oficios', 'Tecnología', 'Vehículos'];
         const ZONES_TRES_ARROYOS = ['Centro', 'Barrio Norte', 'Barrio Sur', 'Villa Italia', 'Villa Primavera', 'Quintas', 'Planta Urbana General'];
@@ -186,7 +187,7 @@
 
         // --- FETCH MASTER FROM SHEETS ---
         async function fetchAllFromSheets(isBackground = false) {
-            if (isEditing) return;
+            if (isEditing || location.hash.includes('crear-tienda') || location.hash.includes('editar-tienda')) return;
             if (isFetching) return;
             if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') && isBackground) {
                 return;
@@ -198,6 +199,7 @@
                 const data = await res.json();
                 
                 if (data) {
+                    window.allData = data;
                     const newTiendas = data.tiendas || [];
                     const newProductos = data.productos || [];
                     const newPedidos = data.pedidos || [];
@@ -215,6 +217,14 @@
                     state.usuarios = newUsuarios;
                     state.isOnline = true;
                     state.isLoading = false;
+
+                    // Sincronizar localStorage ta_mi_tienda si existe en las tiendas bajadas
+                    if (state.session && state.session.email) {
+                        const found = newTiendas.find(t => t.email && t.email.toLowerCase().trim() === state.session.email.toLowerCase().trim());
+                        if (found) {
+                            localStorage.setItem('ta_mi_tienda', JSON.stringify(found));
+                        }
+                    }
 
                     updateSyncBar(true);
 
@@ -315,18 +325,22 @@
             }, 3000);
         }
 
-        // --- ROBUST ROUTER ---
+        // --- ROBUST ROUTER WITH DUPLICATE BLOCKER ---
+        let lastHash = '';
         function handleRoute() {
+            const hash = window.location.hash;
+            if (hash === lastHash && hash !== '') return;
+            lastHash = hash;
+
             const searchParams = new URLSearchParams(window.location.search);
             const querySlug = searchParams.get('tienda') || searchParams.get('t');
-            const hash = window.location.hash;
             let hashSlug = null;
 
             if (hash.startsWith('#t/')) {
                 hashSlug = hash.replace('#t/', '');
             } else if (hash.startsWith('#c/')) {
                 hashSlug = hash.replace('#c/', '');
-            } else if (hash.startsWith('#') && hash !== '#admin' && hash !== '#mi-tienda' && hash !== '#crear-tienda' && !hash.startsWith('#editar-tienda') && hash !== '#mis-productos') {
+            } else if (hash.startsWith('#') && hash !== '#admin' && hash !== '#mi-panel' && hash !== '#mi-tienda' && hash !== '#crear-tienda' && !hash.startsWith('#editar-tienda') && hash !== '#mis-productos') {
                 hashSlug = hash.replace('#', '');
             }
 
@@ -336,8 +350,8 @@
                 state.currentView = 'admin';
                 state.activeSlug = null;
                 isEditing = false;
-            } else if (hash.startsWith('#mi-tienda')) {
-                state.currentView = 'mi-tienda';
+            } else if (hash.startsWith('#mi-panel') || hash.startsWith('#mi-tienda')) {
+                state.currentView = 'mi-panel';
                 state.activeSlug = null;
                 isEditing = false;
             } else if (hash.startsWith('#crear-tienda')) {
@@ -352,7 +366,7 @@
                 state.currentView = 'mis-productos';
                 state.activeSlug = null;
                 isEditing = false;
-            } else if (targetSlug && targetSlug !== 'mi-tienda' && targetSlug !== 'crear-tienda' && !targetSlug.startsWith('editar-tienda') && targetSlug !== 'mis-productos' && targetSlug !== 'admin') {
+            } else if (targetSlug && targetSlug !== 'mi-panel' && targetSlug !== 'mi-tienda' && targetSlug !== 'crear-tienda' && !targetSlug.startsWith('editar-tienda') && targetSlug !== 'mis-productos' && targetSlug !== 'admin') {
                 state.currentView = 'tienda-publica';
                 state.activeSlug = targetSlug;
                 isEditing = false;
@@ -372,7 +386,7 @@
             const app = document.getElementById('app');
             if (!app) return;
 
-            if (state.isLoading) {
+            if (state.isLoading && state.currentView !== 'mi-panel' && state.currentView !== 'editar-tienda' && !localStorage.getItem('ta_mi_tienda')) {
                 app.innerHTML = `
                     <div class="flex-1 flex items-center justify-center py-32 text-center">
                         <div class="space-y-3">
@@ -387,7 +401,7 @@
             let html = '';
             if (state.currentView === 'admin') {
                 html = renderAdminView();
-            } else if (state.currentView === 'mi-tienda') {
+            } else if (state.currentView === 'mi-panel') {
                 html = renderMiPanel();
             } else if (state.currentView === 'crear-tienda') {
                 html = renderCrearTienda();
@@ -481,7 +495,7 @@
                             </a>
                             <div class="flex sm:hidden gap-2">
                                 ${state.session ? 
-                                    `<a href="#mi-tienda" class="bg-teal-700 text-white text-xs px-3 py-2 rounded-xl font-medium">Mi Panel</a>` :
+                                    `<a href="#mi-panel" class="bg-teal-700 text-white text-xs px-3 py-2 rounded-xl font-medium">Mi Panel</a>` :
                                     `<button onclick="openAuthModal('login')" class="bg-teal-700 text-white text-xs px-3 py-2 rounded-xl font-medium">Ingresar</button>`
                                 }
                             </div>
@@ -494,7 +508,7 @@
 
                         <div class="hidden sm:flex items-center gap-3">
                             ${state.session ? 
-                                `<a href="#mi-tienda" class="bg-teal-700 text-white text-sm px-4 py-2.5 rounded-xl font-medium hover:bg-teal-800 transition">Mi Panel</a>` :
+                                `<a href="#mi-panel" class="bg-teal-700 text-white text-sm px-4 py-2.5 rounded-xl font-medium hover:bg-teal-800 transition">Mi Panel</a>` :
                                 `<button onclick="openAuthModal('login')" class="bg-teal-700 text-white text-sm px-4 py-2.5 rounded-xl font-medium hover:bg-teal-800 transition">Ingresar</button>`
                             }
                         </div>
@@ -519,7 +533,7 @@
                         </div>
                         <div class="flex flex-col gap-3 w-full md:w-auto">
                             ${!state.session ? `<button onclick="openAuthModal('register')" class="bg-white text-teal-900 font-bold px-6 py-3 rounded-2xl shadow hover:bg-slate-100 transition text-center">Registrar mi Tienda Gratis</button>` : ''}
-                            <a href="#mi-tienda" class="bg-teal-700 text-white font-semibold px-6 py-3 rounded-2xl border border-teal-600 hover:bg-teal-600 transition text-center">Gestionar Mi Local</a>
+                            <a href="#mi-panel" class="bg-teal-700 text-white font-semibold px-6 py-3 rounded-2xl border border-teal-600 hover:bg-teal-600 transition text-center">Gestionar Mi Local</a>
                         </div>
                     </div>
                 </section>
@@ -755,7 +769,7 @@
         }
 
         // ==========================================
-        // 3. MI PANEL VENDEDOR (#mi-tienda)
+        // 3. MI PANEL VENDEDOR (#mi-panel) - SOLUCIÓN DEFINITIVA
         // ==========================================
         function renderMiPanel() {
             isEditing = false;
@@ -776,12 +790,39 @@
                 `;
             }
 
-            const sessionEmail = state.session.email.toLowerCase().trim();
-            const sessionName = state.session.nombre || 'Emprendedor';
-            let miTienda = state.tiendas.find(t => (t.email && t.email.toLowerCase().trim() === sessionEmail) || (t.dueño && t.dueño.toLowerCase().trim() === sessionEmail));
+            const session = state.session;
+            let miTienda = null;
 
-            // Si NO tiene tienda
-            if (!miTienda) {
+            // 1) Intentar desde localStorage primero (instantáneo)
+            if(localStorage.ta_mi_tienda){
+                try {
+                    miTienda = JSON.parse(localStorage.ta_mi_tienda);
+                } catch(e){}
+            }
+
+            // 2) Si no, buscar en Sheets data.tiendas por email
+            if(!miTienda && window.allData && window.allData.tiendas){
+                miTienda = window.allData.tiendas.find(t => t.email && t.email.toLowerCase() == session.email.toLowerCase());
+                if(miTienda) localStorage.setItem('ta_mi_tienda', JSON.stringify(miTienda));
+            } else if (!miTienda && state.tiendas && state.tiendas.length > 0) {
+                miTienda = state.tiendas.find(t => t.email && t.email.toLowerCase() == session.email.toLowerCase());
+                if(miTienda) localStorage.setItem('ta_mi_tienda', JSON.stringify(miTienda));
+            }
+
+            // 3) Si aún no hay, PERO estamos esperando Sheets (allData aún null), NO REDIRIGIR. Mostrar "Cargando tu tienda..."
+            if(!miTienda && !window.allData && state.isLoading){ 
+                return `
+                    <div class="flex-1 flex items-center justify-center py-32 text-center">
+                        <div class="space-y-3">
+                            <span class="text-4xl animate-spin inline-block">⏳</span>
+                            <p class="text-sm font-semibold text-slate-600">Cargando tu panel desde Sheets...</p>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // 4) Solo si allData ya cargó y confirmamos que no tiene tienda, ahí sí mostrar botón Crear (SIN AUTO-REDIRECTS)
+            if(!miTienda) {
                 return `
                     <header class="bg-white shadow-sm sticky top-0 z-40 w-full">
                         <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
@@ -800,7 +841,8 @@
                 `;
             }
 
-            // Si SÍ tiene tienda -> PANEL VENDEDOR COMPLETO
+            // Panel Vendedor Completo
+            const sessionName = session.nombre || miTienda.dueño || 'Emprendedor';
             const publicLink = `${window.location.origin}${window.location.pathname}#t/${miTienda.slug}`;
 
             return `
@@ -924,17 +966,10 @@
                 `;
             }
 
-            const sessionEmail = state.session.email.toLowerCase().trim();
-            const existing = state.tiendas.find(t => (t.email && t.email.toLowerCase().trim() === sessionEmail) || (t.dueño && t.dueño.toLowerCase().trim() === sessionEmail));
-            if (existing) {
-                window.location.hash = '#mi-tienda';
-                return '';
-            }
-
             return `
                 <header class="bg-white shadow-sm sticky top-0 z-40 w-full">
                     <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
-                        <a href="#mi-tienda" onclick="isEditing=false;" class="text-teal-800 text-sm font-bold">← Volver al Panel</a>
+                        <a href="#mi-panel" onclick="isEditing=false;" class="text-teal-800 text-sm font-bold">← Volver al Panel</a>
                         <button onclick="logout()" class="bg-rose-50 text-rose-700 text-xs px-3 py-2 rounded-xl font-bold">Cerrar Sesión</button>
                     </div>
                 </header>
@@ -995,27 +1030,28 @@
         }
 
         // ==========================================
-        // 5. EDITAR TIENDA (#editar-tienda/SLUG)
+        // 5. EDITAR TIENDA (#editar-tienda)
         // ==========================================
         function renderEditarTienda() {
             isEditing = true;
             if (!state.session) {
-                window.location.hash = '#mi-tienda';
+                window.location.hash = '#mi-panel';
                 return '';
             }
 
             const sessionEmail = state.session.email.toLowerCase().trim();
-            const v = state.tiendas.find(t => (t.email && t.email.toLowerCase().trim() === sessionEmail) || (t.dueño && t.dueño.toLowerCase().trim() === sessionEmail));
-            
-            if (!v) {
-                window.location.hash = '#crear-tienda';
-                return '';
+            let v = null;
+            if(localStorage.ta_mi_tienda) {
+                try { v = JSON.parse(localStorage.ta_mi_tienda); } catch(e){}
+            }
+            if(!v) {
+                v = state.tiendas.find(t => (t.email && t.email.toLowerCase().trim() === sessionEmail) || (t.dueño && t.dueño.toLowerCase().trim() === sessionEmail)) || {};
             }
 
             return `
                 <header class="bg-white shadow-sm sticky top-0 z-40 w-full">
                     <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
-                        <a href="#mi-tienda" onclick="isEditing=false;" class="text-teal-800 text-sm font-bold">← Volver al Panel</a>
+                        <a href="#mi-panel" onclick="isEditing=false;" class="text-teal-800 text-sm font-bold">← Volver al Panel</a>
                         <button onclick="logout()" class="bg-rose-50 text-rose-700 text-xs px-3 py-2 rounded-xl font-bold">Cerrar Sesión</button>
                     </div>
                 </header>
@@ -1102,12 +1138,16 @@
         function renderMisProductos() {
             isEditing = false;
             if (!state.session) {
-                window.location.hash = '#mi-tienda';
+                window.location.hash = '#mi-panel';
                 return '';
             }
 
             const sessionEmail = state.session.email.toLowerCase().trim();
-            const vendor = state.tiendas.find(t => (t.email && t.email.toLowerCase().trim() === sessionEmail) || (t.dueño && t.dueño.toLowerCase().trim() === sessionEmail));
+            let vendor = null;
+            if(localStorage.ta_mi_tienda) { try{ vendor = JSON.parse(localStorage.ta_mi_tienda); }catch(e){} }
+            if(!vendor) {
+                vendor = state.tiendas.find(t => (t.email && t.email.toLowerCase().trim() === sessionEmail) || (t.dueño && t.dueño.toLowerCase().trim() === sessionEmail));
+            }
             
             if (!vendor) {
                 window.location.hash = '#crear-tienda';
@@ -1119,7 +1159,7 @@
             return `
                 <header class="bg-white shadow-sm sticky top-0 z-40 w-full">
                     <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
-                        <a href="#mi-tienda" class="text-teal-800 text-sm font-bold">← Volver al Panel</a>
+                        <a href="#mi-panel" class="text-teal-800 text-sm font-bold">← Volver al Panel</a>
                         <button onclick="logout()" class="bg-rose-50 text-rose-700 text-xs px-3 py-2 rounded-xl font-bold">Cerrar Sesión</button>
                     </div>
                 </header>
@@ -1345,7 +1385,7 @@
         }
 
         // ==========================================
-        // 8. MODALS (Product details, Login/Register auth)
+        // 8. MODALS
         // ==========================================
         function renderModals() {
             let modalsHtml = '';
@@ -1603,9 +1643,14 @@
                 if (foundUser) {
                     state.session = { email: foundUser.email || foundUser.dueño, nombre: foundUser.nombre || foundUser.dueño || 'Usuario' };
                     localStorage.setItem('ta_session', JSON.stringify(state.session));
+                    
+                    // Buscar si tiene tienda para guardar en ta_mi_tienda instantáneamente
+                    const tFound = state.tiendas.find(t => t.email && t.email.toLowerCase().trim() === state.session.email.toLowerCase().trim());
+                    if(tFound) localStorage.setItem('ta_mi_tienda', JSON.stringify(tFound));
+
                     state.authModalOpen = false;
                     showToast("¡Sesión iniciada!");
-                    window.location.hash = '#mi-tienda';
+                    window.location.hash = '#mi-panel';
                     render();
                 } else {
                     showToast("Datos incorrectos, revisá email/pass", "error");
@@ -1620,6 +1665,7 @@
             isEditing = false;
             state.session = null;
             localStorage.removeItem('ta_session');
+            localStorage.removeItem('ta_mi_tienda');
             showToast("Sesión cerrada");
             window.location.hash = '';
         }
@@ -1661,12 +1707,13 @@
                 };
 
                 state.tiendas.push(newTienda);
+                localStorage.setItem('ta_mi_tienda', JSON.stringify(newTienda));
                 postToSheets('crear_tienda', newTienda);
                 isEditing = false;
                 showToast("Tienda guardada ✓");
                 
                 setTimeout(() => {
-                    window.location.hash = '#mi-tienda';
+                    window.location.hash = '#mi-panel';
                     fetchAllFromSheets(false);
                 }, 1000);
             } catch (err) {
@@ -1681,7 +1728,11 @@
             try {
                 const fd = new FormData(e.target);
                 const sessionEmail = state.session ? state.session.email.toLowerCase().trim() : '';
-                const vendor = state.tiendas.find(u => (u.email && u.email.toLowerCase().trim() === sessionEmail) || (u.dueño && u.dueño.toLowerCase().trim() === sessionEmail));
+                let vendor = null;
+                if(localStorage.ta_mi_tienda) { try{ vendor = JSON.parse(localStorage.ta_mi_tienda); }catch(e){} }
+                if(!vendor) {
+                    vendor = state.tiendas.find(u => (u.email && u.email.toLowerCase().trim() === sessionEmail) || (u.dueño && u.dueño.toLowerCase().trim() === sessionEmail));
+                }
                 if (!vendor) return;
 
                 const fotosInput = document.getElementById('new-prod-fotos');
@@ -1783,7 +1834,11 @@
             try {
                 const fd = new FormData(e.target);
                 const sessionEmail = state.session ? state.session.email.toLowerCase().trim() : '';
-                const v = state.tiendas.find(u => (u.email && u.email.toLowerCase().trim() === sessionEmail) || (u.dueño && u.dueño.toLowerCase().trim() === sessionEmail));
+                let v = null;
+                if(localStorage.ta_mi_tienda) { try{ v = JSON.parse(localStorage.ta_mi_tienda); }catch(e){} }
+                if(!v) {
+                    v = state.tiendas.find(u => (u.email && u.email.toLowerCase().trim() === sessionEmail) || (u.dueño && u.dueño.toLowerCase().trim() === sessionEmail));
+                }
                 if (!v) return;
 
                 v.nombreTienda = fd.get('nombreTienda');
@@ -1808,11 +1863,12 @@
                     v.fotosCarrusel = JSON.stringify(car);
                 }
 
+                localStorage.setItem('ta_mi_tienda', JSON.stringify(v));
                 isEditing = false;
                 postToSheets('actualizar_tienda', v);
                 showToast("Tienda guardada ✓");
                 setTimeout(() => {
-                    window.location.hash = '#mi-tienda';
+                    window.location.hash = '#mi-panel';
                     fetchAllFromSheets(false);
                 }, 1000);
             } catch (err) {
@@ -1895,17 +1951,18 @@
             handleRoute();
 
             setInterval(() => {
-                if (isEditing) return;
+                if (isEditing || location.hash.includes('crear-tienda') || location.hash.includes('editar-tienda')) return;
                 if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA')) return;
                 fetchAllFromSheets(true);
             }, 2000);
 
             document.addEventListener('visibilitychange', async () => {
-                if (document.visibilityState === 'visible' && !isEditing) {
+                if (document.visibilityState === 'visible' && !isEditing && !location.hash.includes('crear-tienda') && !location.hash.includes('editar-tienda')) {
                     await fetchAllFromSheets(false);
                 }
             });
         });
     </script>
 </body>
-    </html>
+</html>
+
