@@ -23,15 +23,20 @@
     <!-- Google Fonts: Inter -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        body {
+        html, body {
+            width: 100%;
+            max-width: 100vw;
+            overflow-x: hidden;
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
             font-family: 'Inter', sans-serif;
             background-color: #f8fafc;
             color: #1e293b;
-            overflow-x: hidden;
             -webkit-tap-highlight-color: transparent;
         }
-        * {
-            box-sizing: border-box;
+        *, *:before, *:after {
+            box-sizing: inherit;
             max-width: 100%;
         }
         .modal-box {
@@ -46,18 +51,48 @@
             -ms-overflow-style: none;
             scrollbar-width: none;
         }
+        /* Responsive Grid Adjustments */
+        @media (max-width: 768px) {
+            .responsive-grid {
+                grid-template-columns: 1fr !important;
+            }
+            .responsive-card {
+                margin: 4px 0;
+            }
+        }
+        @media (min-width: 769px) and (max-width: 1024px) {
+            .responsive-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            }
+        }
+        @media (min-width: 1025px) {
+            .responsive-grid {
+                grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+            }
+        }
+        /* Carousel height scaling */
+        .store-carousel-img {
+            height: 220px;
+            object-fit: cover;
+            width: 100%;
+        }
+        @media (min-width: 768px) {
+            .store-carousel-img {
+                height: 300px;
+            }
+        }
     </style>
 </head>
 <body class="bg-bglight text-dark min-h-screen flex flex-col">
 
     <!-- SYNC STATUS BAR -->
     <div id="sync-bar" class="bg-slate-800 text-white text-xs py-1 px-4 text-center flex justify-between items-center z-50">
-        <span id="sync-status-text">● Sincronizando con Sheets...</span>
+        <span id="sync-status-text">● Sincronizado en tiempo real...</span>
         <button onclick="manualSync()" class="underline text-teal-300 hover:text-white">Actualizar</button>
     </div>
 
     <!-- MAIN APP CONTAINER -->
-    <div id="app" class="flex-1 flex flex-col">
+    <div id="app" class="flex-1 flex flex-col w-full">
         <!-- Rendered dynamically -->
     </div>
 
@@ -69,7 +104,7 @@
         const SHEET_URL = "https://script.google.com/macros/s/AKfycbz6sUbdfJ23AOKNC0hwfGMWTeZ-9Ck4LpgeT4aEGmwm5SA3GVqtj-PGFBjx7PQh7ONWuA/exec";
         const CENTRAL_WSP = "5492983389710";
 
-        // APP STATE (LocalStorage first with safe fallbacks)
+        // APP STATE
         let state = {
             users: JSON.parse(localStorage.getItem('ta_users') || '[]'),
             products: JSON.parse(localStorage.getItem('ta_products') || '[]'),
@@ -77,6 +112,7 @@
             session: JSON.parse(localStorage.getItem('ta_session') || 'null'),
             pendingSync: JSON.parse(localStorage.getItem('ta_pending_sync') || '[]'),
             isOnline: true,
+            consecutiveErrors: 0,
             activeCategory: 'Todos',
             searchQuery: '',
             authTab: 'login',
@@ -86,13 +122,15 @@
             editCatalogModalOpen: false,
             editProductModal: null,
             checkoutData: { cant: 1, cliente: '', direccion: '', nota: '', flash: false },
-            adminAuthed: sessionStorage.getItem('ta_admin_auth') === 'true'
+            adminAuthed: sessionStorage.getItem('ta_admin_auth') === 'true',
+            currentView: 'catalogo',
+            activeSlug: null
         };
 
         const CATEGORIES = ['Todos', 'Alimentos', 'Servicios', 'Indumentaria', 'Hogar y Deco', 'Belleza', 'Oficios', 'Tecnología', 'Vehículos'];
         const ZONES_TRES_ARROYOS = ['Centro', 'Barrio Norte', 'Barrio Sur', 'Villa Italia', 'Villa Primavera', 'Quintas', 'Planta Urbana General'];
 
-        // --- PRE-COMPRESSION FIRST (Max 700px, Quality 0.55 / 0.4) ---
+        // --- COMPRESSION UTILS ---
         async function compressImage(file, maxWidth = 700, quality = 0.55) {
             return new Promise((resolve) => {
                 if (!file) {
@@ -149,7 +187,7 @@
             }
         }
 
-        // --- SAFE LOCAL STORAGE WITH QUOTA EXCEEDED HANDLING ---
+        // --- LOCAL STORAGE ---
         function saveLocal() {
             try {
                 localStorage.setItem('ta_users', JSON.stringify(state.users));
@@ -174,7 +212,6 @@
                     showToast("Almacenamiento optimizado ✓");
                 } catch (err2) {
                     console.error("Critical storage failure:", err2);
-                    showToast("Memoria local llena, contacte soporte", "error");
                 }
             }
         }
@@ -189,32 +226,53 @@
                     body: JSON.stringify({ action, ...payload })
                 });
                 state.isOnline = true;
+                state.consecutiveErrors = 0;
                 updateSyncBar(true);
             } catch (err) {
                 console.error("Sync error:", err);
                 state.isOnline = false;
+                state.consecutiveErrors++;
                 updateSyncBar(false);
                 state.pendingSync.push({ action, payload, time: Date.now() });
                 localStorage.setItem('ta_pending_sync', JSON.stringify(state.pendingSync));
             }
         }
 
-        async function fetchAllFromSheets() {
+        async function loadFromSheets() {
+            // Do not override if user is currently interacting with an edit modal or auth modal
+            if (state.editStoreModalOpen || state.editCatalogModalOpen || state.authModalOpen || state.editProductModal) {
+                return;
+            }
             try {
                 const res = await fetch(`${SHEET_URL}?action=get_all`);
                 const data = await res.json();
                 if (data && data.users) {
-                    if (data.users.length > 0) state.users = data.users;
-                    if (data.products.length > 0) state.products = data.products;
-                    if (data.orders.length > 0) state.orders = data.orders;
+                    let hasChanged = false;
+                    if (JSON.stringify(data.users) !== JSON.stringify(state.users) ||
+                        JSON.stringify(data.products) !== JSON.stringify(state.products)) {
+                        hasChanged = true;
+                    }
+                    
+                    state.users = data.users.length > 0 ? data.users : state.users;
+                    state.products = data.products.length > 0 ? data.products : state.products;
+                    state.orders = data.orders.length > 0 ? data.orders : state.orders;
                     saveLocal();
+
                     state.isOnline = true;
+                    state.consecutiveErrors = 0;
                     updateSyncBar(true);
-                    render();
+
+                    if (hasChanged) {
+                        showToast("Nueva actualización ↓");
+                        render();
+                    }
                 }
             } catch (e) {
-                state.isOnline = false;
-                updateSyncBar(false);
+                state.consecutiveErrors++;
+                if (state.consecutiveErrors >= 3) {
+                    state.isOnline = false;
+                    updateSyncBar(false);
+                }
             }
         }
 
@@ -224,16 +282,16 @@
             if (!bar || !txt) return;
             if (online) {
                 bar.className = "bg-teal-800 text-white text-xs py-1 px-4 text-center flex justify-between items-center z-50";
-                txt.innerText = "● Sincronizado con Sheets";
+                txt.innerText = "● Sincronizado en tiempo real";
             } else {
                 bar.className = "bg-amber-700 text-white text-xs py-1 px-4 text-center flex justify-between items-center z-50";
-                txt.innerText = "○ Sin conexión - Guardado local (reintentando)";
+                txt.innerText = "○ Offline - Modo Local";
             }
         }
 
         function manualSync() {
             showToast("Sincronizando datos...");
-            fetchAllFromSheets();
+            loadFromSheets();
             if (state.pendingSync.length > 0) {
                 let item = state.pendingSync.shift();
                 syncWithSheets(item.action, item.payload);
@@ -288,28 +346,41 @@
             }, 3000);
         }
 
-        // --- ROUTING ---
+        // --- ROBUST ROUTER SUPPORTING HASH AND SEARCH ---
         function handleRoute() {
+            const searchParams = new URLSearchParams(window.location.search);
+            const querySlug = searchParams.get('tienda') || searchParams.get('t');
             const hash = window.location.hash;
-            if (hash.startsWith('#admin') || window.location.pathname.includes('admin') || window.location.search.includes('admin')) {
+            let hashSlug = null;
+
+            if (hash.startsWith('#t/')) {
+                hashSlug = hash.replace('#t/', '');
+            } else if (hash.startsWith('#c/')) {
+                hashSlug = hash.replace('#c/', '');
+            } else if (hash.startsWith('#')) {
+                hashSlug = hash.replace('#', '');
+            }
+
+            const targetSlug = querySlug || hashSlug;
+
+            if (hash.startsWith('#admin') || window.location.pathname.includes('admin') || searchParams.has('admin')) {
                 state.currentView = 'admin';
+                state.activeSlug = null;
             } else if (hash.startsWith('#mi-tienda')) {
                 state.currentView = 'mi-tienda';
-            } else if (hash.startsWith('#t/')) {
-                const slug = hash.replace('#t/', '');
+                state.activeSlug = null;
+            } else if (targetSlug && targetSlug !== 'mi-tienda' && targetSlug !== 'admin') {
                 state.currentView = 'tienda-publica';
-                state.activeSlug = slug;
-            } else if (hash.startsWith('#c/')) {
-                const slug = hash.replace('#c/', '');
-                state.currentView = 'tienda-publica';
-                state.activeSlug = slug;
+                state.activeSlug = targetSlug;
             } else {
                 state.currentView = 'catalogo';
+                state.activeSlug = null;
             }
             render();
         }
 
         window.addEventListener('hashchange', handleRoute);
+        window.addEventListener('popstate', handleRoute);
 
         // --- RENDER MASTER ---
         function render() {
@@ -332,7 +403,7 @@
             startCarousels();
         }
 
-        // --- RENDER SOCIAL BUTTONS (Grid 2x2 mobile, 4 in row desktop, h-12 [48px], rounded-[14px]) ---
+        // --- SOCIAL BUTTONS HELPER ---
         function renderSocialButtons(v) {
             let hasAny = v.instagramUrl || v.wsp || v.facebookUrl || v.webUrl;
             if (!hasAny) return '';
@@ -399,7 +470,7 @@
             }
 
             return `
-                <header class="bg-white shadow-sm sticky top-0 z-40">
+                <header class="bg-white shadow-sm sticky top-0 z-40 w-full">
                     <div class="max-w-6xl mx-auto px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3">
                         <div class="flex items-center justify-between w-full sm:w-auto">
                             <a href="#" class="text-xl font-bold text-teal-800 flex items-center gap-2">
@@ -462,13 +533,13 @@
                             <p class="text-slate-500 text-sm mt-1">Probá cambiando de categoría o buscando otro término.</p>
                         </div>
                     ` : `
-                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div class="grid responsive-grid gap-4">
                             ${filteredProducts.map(p => {
                                 const vendor = state.users.find(u => u.email === p.vendorEmail) || { nombreTienda: 'Local Local', slug: '#' };
                                 const fotos = p.fotos && p.fotos.length > 0 ? p.fotos : ['https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500'];
                                 const cId = 'prod_card_' + p.id;
                                 return `
-                                    <div onclick="openProductModal('${p.id}')" class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col cursor-pointer hover:shadow-md transition">
+                                    <div onclick="openProductModal('${p.id}')" class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col cursor-pointer hover:shadow-md transition responsive-card">
                                         <div class="relative h-40 bg-slate-100 carousel-container overflow-hidden" data-carousel-id="${cId}">
                                             ${fotos.map((f, i) => `
                                                 <div class="carousel-slide w-full h-full" style="display: ${i===0?'block':'none'}">
@@ -500,7 +571,7 @@
                     `}
                 </main>
 
-                <footer class="bg-white border-t border-slate-200 mt-12 py-8 text-center text-sm text-slate-500">
+                <footer class="bg-white border-t border-slate-200 mt-12 py-8 text-center text-sm text-slate-500 w-full">
                     <p class="font-semibold text-teal-800">Tres Arroyos Market 🛒</p>
                     <p class="mt-1">El punto de encuentro digital para el comercio local de Tres Arroyos.</p>
                 </footer>
@@ -518,7 +589,7 @@
                         <span class="text-5xl mb-4 block">🔍</span>
                         <h2 class="text-xl font-bold text-slate-800">Tienda no encontrada</h2>
                         <p class="text-slate-500 text-sm mt-2">El enlace ingresado no corresponde a ningún comercio activo en Tres Arroyos Market.</p>
-                        <a href="#" class="mt-6 inline-block bg-teal-700 text-white font-medium px-6 py-3 rounded-2xl">Volver al Catálogo General</a>
+                        <a href="#" class="mt-6 inline-block bg-teal-700 text-white font-medium px-6 py-3 rounded-2xl">Ver todas las tiendas / Volver al inicio</a>
                     </div>
                 `;
             }
@@ -535,19 +606,19 @@
             const restoProds = prods.filter(p => !destacadosIds.includes(p.id));
 
             return `
-                <header class="bg-white shadow-sm sticky top-0 z-40">
+                <header class="bg-white shadow-sm sticky top-0 z-40 w-full">
                     <div class="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
-                        <a href="#" class="text-teal-800 text-sm font-bold flex items-center gap-1">← Volver al Market</a>
+                        <a href="#" class="text-teal-800 text-sm font-bold flex items-center gap-1">← Ver todas las tiendas</a>
                         <span class="text-sm font-semibold text-slate-700 truncate max-w-[200px]">${vendor.nombreTienda}</span>
                         <a href="https://wa.me/549${vendor.wsp}?text=${encodeURIComponent('Hola ' + vendor.nombreTienda + ', te contacto desde Tres Arroyos Market.')}" target="_blank" class="bg-emerald-600 text-white text-xs px-3 py-2 rounded-xl font-bold flex items-center gap-1">WhatsApp</a>
                     </div>
                 </header>
 
                 <main class="max-w-4xl mx-auto px-4 py-4 flex-1 w-full space-y-6">
-                    <div class="relative h-48 sm:h-64 rounded-3xl overflow-hidden bg-slate-200 shadow-sm carousel-container" data-carousel-id="store_banner">
+                    <div class="relative rounded-3xl overflow-hidden bg-slate-200 shadow-sm carousel-container" data-carousel-id="store_banner">
                         ${bannerFotos.map((f, i) => `
                             <div class="carousel-slide w-full h-full" style="display: ${i===0?'block':'none'}">
-                                <img src="${f}" class="w-full h-full object-cover">
+                                <img src="${f}" class="store-carousel-img">
                             </div>
                         `).join('')}
                         ${bannerFotos.length > 1 ? `
@@ -580,7 +651,6 @@
                             </div>
                         ` : ''}
 
-                        <!-- SOCIAL BUTTONS PLACED CORRECTLY IN STORE INFO SECTION -->
                         ${renderSocialButtons(vendor)}
                     </div>
 
@@ -605,15 +675,18 @@
                                 <p class="text-slate-500 text-sm">Este local todavía no cargó productos activos.</p>
                             </div>
                         ` : `
-                            <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                            <div class="grid responsive-grid gap-4">
                                 ${restoProds.map(p => renderProductCard(p, false)).join('')}
                             </div>
                         `}
                     </div>
                 </main>
 
-                <footer class="bg-white border-t border-slate-200 mt-12 py-6 text-center text-xs text-slate-500">
+                <footer class="bg-white border-t border-slate-200 mt-12 py-6 text-center text-xs text-slate-500 w-full">
                     <p>Tres Arroyos Market • Tienda de <b class="text-slate-700">${vendor.nombreTienda}</b></p>
+                    <div class="mt-2">
+                        <a href="#" class="text-teal-700 underline font-semibold">Ver todas las tiendas del market</a>
+                    </div>
                 </footer>
             `;
         }
@@ -622,7 +695,7 @@
             const fotos = p.fotos && p.fotos.length > 0 ? p.fotos : ['https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500'];
             const cId = 'prod_card_pub_' + p.id;
             return `
-                <div onclick="openProductModal('${p.id}')" class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col cursor-pointer hover:shadow-md transition ${isFeatured ? 'ring-2 ring-teal-600/30' : ''}">
+                <div onclick="openProductModal('${p.id}')" class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col cursor-pointer hover:shadow-md transition ${isFeatured ? 'ring-2 ring-teal-600/30' : ''} responsive-card">
                     <div class="relative ${isFeatured ? 'h-48' : 'h-40'} bg-slate-100 carousel-container overflow-hidden" data-carousel-id="${cId}">
                         ${fotos.map((f, i) => `
                             <div class="carousel-slide w-full h-full" style="display: ${i===0?'block':'none'}">
@@ -683,7 +756,7 @@
             const publicLink = `${window.location.origin}${window.location.pathname}#t/${vendor.slug}`;
 
             return `
-                <header class="bg-white shadow-sm sticky top-0 z-40">
+                <header class="bg-white shadow-sm sticky top-0 z-40 w-full">
                     <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
                         <a href="#" class="text-teal-800 text-sm font-bold">← Ir al Market</a>
                         <div class="flex items-center gap-2">
@@ -878,7 +951,7 @@
             const totalGeneralIngresos = totalComisiones10 + totalEnvios2000;
 
             return `
-                <header class="bg-slate-900 text-white sticky top-0 z-40">
+                <header class="bg-slate-900 text-white sticky top-0 z-40 w-full">
                     <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
                         <div class="flex items-center gap-2">
                             <span class="text-lg">🛡️</span>
@@ -1069,7 +1142,7 @@
                                     `).join('')}
                                     ${fotos.length > 1 ? `
                                         <div class="absolute bottom-2 left-0 right-0 flex justify-center gap-1.5 z-10">
-                                            ${fotos.map((_, i) => `<span class="carousel-dot w-2 h-2 rounded-full ${i===0?'bg-white':'bg-white/50'}"></span>`).join('')}
+                                            ${fotos.map((_, i) => `<span class="carousel-dot w-1.5 h-1.5 rounded-full ${i===0?'bg-white':'bg-white/50'}"></span>`).join('')}
                                         </div>
                                     ` : ''}
                                     <span class="absolute top-3 left-3 bg-teal-900/80 text-white text-xs px-2.5 py-1 rounded-xl font-medium">${p.categoria}</span>
@@ -1349,7 +1422,7 @@
                 saveLocal();
                 await syncWithSheets('register_user', newUser);
                 showToast("¡Tienda registrada con éxito!");
-                window.location.hash = '#mi-tienda';
+                window.location.hash = '#t/' + slug;
             } catch (err) {
                 console.error("Error in handleRegister:", err);
                 showToast("Error al registrar tienda", "error");
@@ -1620,16 +1693,23 @@
             }
         }
 
-        // --- INIT ---
-        window.addEventListener('DOMContentLoaded', () => {
-            fetchAllFromSheets();
+        // --- REAL-TIME INIT & INTERVALS ---
+        window.addEventListener('DOMContentLoaded', async () => {
+            await loadFromSheets();
             handleRoute();
-            setInterval(() => {
-                if (state.pendingSync.length > 0 && state.isOnline) {
-                    let item = state.pendingSync.shift();
-                    syncWithSheets(item.action, item.payload);
+
+            // Real-time polling every 8 seconds for stores/products/orders
+            setInterval(async () => {
+                let intervalTime = (state.consecutiveErrors >= 3) ? 30000 : 8000;
+                await loadFromSheets();
+            }, 8000);
+
+            // Visibility change trigger
+            document.addEventListener('visibilitychange', async () => {
+                if (document.visibilityState === 'visible') {
+                    await loadFromSheets();
                 }
-            }, 15000);
+            });
         });
     </script>
 </body>
