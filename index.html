@@ -91,7 +91,6 @@
 
     <!-- MAIN APP CONTAINER -->
     <div id="app" class="flex-1 flex flex-col w-full">
-        <!-- Rendered dynamically -->
         <div class="flex-1 flex items-center justify-center py-32 text-center">
             <div class="space-y-3">
                 <span class="text-4xl animate-spin inline-block">⏳</span>
@@ -108,7 +107,7 @@
         const SHEET_URL = "https://script.google.com/macros/s/AKfycbz6sUbdfJ23AOKNC0hwfGMWTeZ-9Ck4LpgeT4aEGmwm5SA3GVqtj-PGFBjx7PQh7ONWuA/exec";
         const CENTRAL_WSP = "5492983389710";
 
-        // 100% GOOGLE SHEETS STATE (Only session in localStorage)
+        // 100% GOOGLE SHEETS STATE (Only ta_session in localStorage)
         let state = {
             tiendas: [],
             productos: [],
@@ -186,7 +185,6 @@
 
         // --- FETCH MASTER FROM SHEETS ---
         async function fetchAllFromSheets(isBackground = false) {
-            // Do not override if user is actively editing a form/modal
             if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') && isBackground) {
                 return;
             }
@@ -204,7 +202,8 @@
                     const hasChanged = 
                         JSON.stringify(newTiendas) !== JSON.stringify(state.tiendas) ||
                         JSON.stringify(newProductos) !== JSON.stringify(state.productos) ||
-                        JSON.stringify(newPedidos) !== JSON.stringify(state.pedidos);
+                        JSON.stringify(newPedidos) !== JSON.stringify(state.pedidos) ||
+                        JSON.stringify(newUsuarios) !== JSON.stringify(state.usuarios);
 
                     state.tiendas = newTiendas;
                     state.productos = newProductos;
@@ -322,7 +321,7 @@
                 hashSlug = hash.replace('#t/', '');
             } else if (hash.startsWith('#c/')) {
                 hashSlug = hash.replace('#c/', '');
-            } else if (hash.startsWith('#') && hash !== '#admin' && hash !== '#mi-tienda') {
+            } else if (hash.startsWith('#') && hash !== '#admin' && hash !== '#mi-tienda' && hash !== '#crear-tienda') {
                 hashSlug = hash.replace('#', '');
             }
 
@@ -331,10 +330,10 @@
             if (hash.startsWith('#admin') || window.location.pathname.includes('admin') || searchParams.has('admin')) {
                 state.currentView = 'admin';
                 state.activeSlug = null;
-            } else if (hash.startsWith('#mi-tienda')) {
+            } else if (hash.startsWith('#mi-tienda') || hash.startsWith('#crear-tienda')) {
                 state.currentView = 'mi-tienda';
                 state.activeSlug = null;
-            } else if (targetSlug && targetSlug !== 'mi-tienda' && targetSlug !== 'admin') {
+            } else if (targetSlug && targetSlug !== 'mi-tienda' && targetSlug !== 'crear-tienda' && targetSlug !== 'admin') {
                 state.currentView = 'tienda-publica';
                 state.activeSlug = targetSlug;
             } else {
@@ -433,7 +432,7 @@
         // 1. GENERAL CATALOG & HEADER SESSION
         // ==========================================
         function renderGeneralCatalogView() {
-            const activeUser = state.session ? state.tiendas.find(u => u.email === state.session.email || u.dueño === state.session.email) : null;
+            const activeUser = state.session ? state.tiendas.find(u => (u.email && u.email.toLowerCase().trim() === state.session.email.toLowerCase().trim()) || (u.dueño && u.dueño.toLowerCase().trim() === state.session.email.toLowerCase().trim())) : null;
             const primaryColor = activeUser && activeUser.catalogo && activeUser.catalogo.color ? activeUser.catalogo.color : '#0f766e';
             document.documentElement.style.setProperty('--primary-color', primaryColor);
 
@@ -456,7 +455,7 @@
                             <div class="flex sm:hidden gap-2">
                                 ${state.session ? 
                                     `<a href="#mi-tienda" class="bg-teal-700 text-white text-xs px-3 py-2 rounded-xl font-medium">Mi Panel</a>` :
-                                    `<button onclick="openAuthModal('register')" class="bg-teal-700 text-white text-xs px-3 py-2 rounded-xl font-medium">Crear tienda</button>`
+                                    `<button onclick="openAuthModal('register')" class="bg-teal-700 text-white text-xs px-3 py-2 rounded-xl font-medium">Ingresar</button>`
                                 }
                             </div>
                         </div>
@@ -469,7 +468,7 @@
                         <div class="hidden sm:flex items-center gap-3">
                             ${state.session ? 
                                 `<a href="#mi-tienda" class="bg-teal-700 text-white text-sm px-4 py-2.5 rounded-xl font-medium hover:bg-teal-800 transition">Mi Panel</a>` :
-                                `<button onclick="openAuthModal('register')" class="bg-teal-700 text-white text-sm px-4 py-2.5 rounded-xl font-medium hover:bg-teal-800 transition">Crear tienda / Login</button>`
+                                `<button onclick="openAuthModal('login')" class="bg-teal-700 text-white text-sm px-4 py-2.5 rounded-xl font-medium hover:bg-teal-800 transition">Ingresar</button>`
                             }
                         </div>
                     </div>
@@ -512,7 +511,7 @@
                     ` : `
                         <div class="grid responsive-grid gap-4">
                             ${filteredProducts.map(p => {
-                                const vendor = state.tiendas.find(u => u.email === p.vendorEmail || u.slug === p.tiendaSlug) || { nombreTienda: 'Local Local', slug: '#' };
+                                const vendor = state.tiendas.find(u => (u.email && u.email === p.vendorEmail) || (u.slug && u.slug === p.tiendaSlug)) || { nombreTienda: 'Local Local', slug: '#' };
                                 let fotos = ['https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500'];
                                 try {
                                     if (p.fotos) {
@@ -587,7 +586,7 @@
             const primaryColor = catalogoConfig.color || '#0f766e';
             document.documentElement.style.setProperty('--primary-color', primaryColor);
 
-            const prods = state.productos.filter(p => (p.vendorEmail === vendor.email || p.tiendaSlug === vendor.slug) && p.activo !== false && p.activo !== 'false');
+            const prods = state.productos.filter(p => ((p.vendorEmail && p.vendorEmail === vendor.email) || (p.tiendaSlug && p.tiendaSlug === vendor.slug)) && p.activo !== false && p.activo !== 'false');
             
             let bannerFotos = ['https://images.unsplash.com/photo-1557804506-669a67965ba0?w=1200'];
             try {
@@ -748,14 +747,62 @@
                 `;
             }
 
-            const vendor = state.tiendas.find(u => u.email === state.session.email || u.dueño === state.session.email);
+            const sessionEmail = state.session.email.toLowerCase().trim();
+            let vendor = state.tiendas.find(u => (u.email && u.email.toLowerCase().trim() === sessionEmail) || (u.dueño && u.dueño.toLowerCase().trim() === sessionEmail));
+            
+            // If logged in user doesn't have a store yet, show creation form wizard
             if (!vendor) {
-                logout();
-                return '';
+                return `
+                    <header class="bg-white shadow-sm sticky top-0 z-40 w-full">
+                        <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
+                            <a href="#" class="text-teal-800 text-sm font-bold">← Volver al Market</a>
+                            <button onclick="logout()" class="bg-rose-50 text-rose-700 text-xs px-3 py-2 rounded-xl font-bold">Cerrar Sesión</button>
+                        </div>
+                    </header>
+                    <main class="max-w-xl mx-auto px-4 py-8 flex-1 w-full space-y-6">
+                        <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 space-y-4">
+                            <div class="text-center">
+                                <span class="text-4xl">🏪</span>
+                                <h1 class="text-xl font-extrabold text-slate-900 mt-2">¡Configurá tu Tienda!</h1>
+                                <p class="text-xs text-slate-500 mt-1">Ya iniciaste sesión, ahora completá los datos de tu emprendimiento en Tres Arroyos.</p>
+                            </div>
+                            <form onsubmit="handleCreateStoreWizard(event)" class="space-y-3">
+                                <div>
+                                    <label class="text-xs font-semibold text-slate-700">Nombre de Tienda</label>
+                                    <input type="text" name="nombreTienda" required placeholder="Ej: Hamburguesas Don Carlos" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm mt-1">
+                                </div>
+                                <div>
+                                    <label class="text-xs font-semibold text-slate-700">Dueño / Responsable</label>
+                                    <input type="text" name="dueño" value="${state.session.nombre || ''}" required placeholder="Ej: Carlos Gómez" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm mt-1">
+                                </div>
+                                <div class="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label class="text-xs font-semibold text-slate-700">WhatsApp (Ej: 2983445566)</label>
+                                        <input type="text" name="wsp" required placeholder="2983445566" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm mt-1">
+                                    </div>
+                                    <div>
+                                        <label class="text-xs font-semibold text-slate-700">Zona</label>
+                                        <select name="zona" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm mt-1">
+                                            ${ZONES_TRES_ARROYOS.map(z => `<option value="${z}">${z}</option>`).join('')}
+                                        </select>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="text-xs font-semibold text-slate-700">¿Vehículo Propio?</label>
+                                    <select name="vehiculo" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm mt-1">
+                                        <option value="Si">Si</option>
+                                        <option value="No">No (Usaré servicio Flash)</option>
+                                    </select>
+                                </div>
+                                <button type="submit" class="w-full h-12 bg-teal-700 hover:bg-teal-800 text-white font-bold rounded-2xl shadow transition text-sm mt-2">Crear mi Tienda Ahora</button>
+                            </form>
+                        </div>
+                    </main>
+                `;
             }
 
-            const myProducts = state.productos.filter(p => p.vendorEmail === vendor.email || p.tiendaSlug === vendor.slug);
-            const myOrders = state.pedidos.filter(o => o.vendorEmail === vendor.email || o.tiendaNombre === vendor.nombreTienda);
+            const myProducts = state.productos.filter(p => (p.vendorEmail && p.vendorEmail.toLowerCase().trim() === sessionEmail) || (p.tiendaSlug && p.tiendaSlug === vendor.slug));
+            const myOrders = state.pedidos.filter(o => (o.vendorEmail && o.vendorEmail.toLowerCase().trim() === sessionEmail) || (o.tiendaNombre && o.tiendaNombre.toLowerCase().trim() === vendor.nombreTienda.toLowerCase().trim()));
             const flashOrdersCount = myOrders.filter(o => o.flash === true || o.flash === 'true' || o.flash === 'TRUE').length;
             const publicLink = `${window.location.origin}${window.location.pathname}#t/${vendor.slug}`;
 
@@ -1093,39 +1140,22 @@
                             ` : `
                                 <form onsubmit="handleRegister(event)" class="space-y-3 max-h-[75vh] overflow-y-auto pr-1">
                                     <div>
-                                        <label class="text-xs font-semibold text-slate-700">Nombre de Tienda / Emprendimiento</label>
-                                        <input type="text" name="nombreTienda" required placeholder="Ej: Hamburguesas Don Carlos" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm mt-1 focus:outline-none focus:border-teal-700">
-                                    </div>
-                                    <div>
-                                        <label class="text-xs font-semibold text-slate-700">Nombre del Dueño</label>
-                                        <input type="text" name="dueño" required placeholder="Ej: Carlos Gómez" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm mt-1 focus:outline-none focus:border-teal-700">
+                                        <label class="text-xs font-semibold text-slate-700">Nombre / Responsable</label>
+                                        <input type="text" name="nombre" required placeholder="Ej: Carlos Gómez" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm mt-1 focus:outline-none focus:border-teal-700">
                                     </div>
                                     <div>
                                         <label class="text-xs font-semibold text-slate-700">Email</label>
                                         <input type="email" name="email" required placeholder="tu@email.com" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm mt-1 focus:outline-none focus:border-teal-700">
                                     </div>
                                     <div>
-                                        <label class="text-xs font-semibold text-slate-700">WhatsApp (Formato 2983XXXXXX)</label>
+                                        <label class="text-xs font-semibold text-slate-700">WhatsApp</label>
                                         <input type="text" name="wsp" required placeholder="2983445566" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm mt-1 focus:outline-none focus:border-teal-700">
                                     </div>
                                     <div>
                                         <label class="text-xs font-semibold text-slate-700">Contraseña</label>
                                         <input type="password" name="password" required class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm mt-1 focus:outline-none focus:border-teal-700">
                                     </div>
-                                    <div>
-                                        <label class="text-xs font-semibold text-slate-700">Zona de Tres Arroyos</label>
-                                        <select name="zona" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm mt-1 focus:outline-none focus:border-teal-700">
-                                            ${ZONES_TRES_ARROYOS.map(z => `<option value="${z}">${z}</option>`).join('')}
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label class="text-xs font-semibold text-slate-700">¿Tenés vehículo de entrega propio?</label>
-                                        <select name="vehiculo" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm mt-1 focus:outline-none focus:border-teal-700">
-                                            <option value="Si">Si</option>
-                                            <option value="No">No (Usaré servicio Flash)</option>
-                                        </select>
-                                    </div>
-                                    <button type="submit" class="w-full h-12 bg-teal-700 hover:bg-teal-800 text-white font-bold rounded-2xl shadow transition text-sm mt-2">Registrar Tienda</button>
+                                    <button type="submit" class="w-full h-12 bg-teal-700 hover:bg-teal-800 text-white font-bold rounded-2xl shadow transition text-sm mt-2">Registrarse y Crear Tienda</button>
                                 </form>
                             `}
                         </div>
@@ -1136,7 +1166,7 @@
             if (state.selectedProductModal) {
                 const p = state.productos.find(prod => prod.id === state.selectedProductModal);
                 if (p) {
-                    const vendor = state.tiendas.find(u => u.email === p.vendorEmail || u.slug === p.tiendaSlug) || {};
+                    const vendor = state.tiendas.find(u => (u.email && u.email === p.vendorEmail) || (u.slug && u.slug === p.tiendaSlug)) || {};
                     let fotos = ['https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500'];
                     try {
                         if (p.fotos) {
@@ -1219,7 +1249,8 @@
             }
 
             if (state.editStoreModalOpen) {
-                const v = state.tiendas.find(u => u.email === state.session.email || u.dueño === state.session.email);
+                const sessionEmail = state.session ? state.session.email.toLowerCase().trim() : '';
+                const v = state.tiendas.find(u => (u.email && u.email.toLowerCase().trim() === sessionEmail) || (u.dueño && u.dueño.toLowerCase().trim() === sessionEmail)) || {};
                 modalsHtml += `
                     <div class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
                         <div class="bg-white rounded-3xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 shadow-2xl space-y-4 relative modal-box">
@@ -1295,14 +1326,15 @@
             }
 
             if (state.editCatalogModalOpen) {
-                const v = state.tiendas.find(u => u.email === state.session.email || u.dueño === state.session.email);
+                const sessionEmail = state.session ? state.session.email.toLowerCase().trim() : '';
+                const v = state.tiendas.find(u => (u.email && u.email.toLowerCase().trim() === sessionEmail) || (u.dueño && u.dueño.toLowerCase().trim() === sessionEmail)) || {};
                 let cat = { titulo: 'Catálogo Verano', desc: 'Envíos en el día', bienvenida: '¡Bienvenidos!', color: '#0f766e', destacadosIds: [], mostrarInfo: 'Si' };
                 try {
                     if (v.catalogo) {
                         cat = typeof v.catalogo === 'string' ? JSON.parse(v.catalogo) : v.catalogo;
                     }
                 } catch(e) {}
-                const myProducts = state.productos.filter(p => p.vendorEmail === v.email || p.tiendaSlug === v.slug);
+                const myProducts = state.productos.filter(p => (p.vendorEmail && p.vendorEmail === v.email) || (p.tiendaSlug && p.tiendaSlug === v.slug));
 
                 modalsHtml += `
                     <div class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
@@ -1402,7 +1434,7 @@
         }
 
         // ==========================================
-        // 6. CONTROLLERS WITH SHEETS PERSISTENCE
+        // 6. CONTROLLERS & AUTHENTICATION FLOW
         // ==========================================
         function openAuthModal(tab = 'login') {
             state.authModalOpen = true;
@@ -1414,48 +1446,48 @@
             e.preventDefault();
             try {
                 const fd = new FormData(e.target);
-                const email = fd.get('email').trim();
-                if (state.usuarios.some(u => u.email === email || u.dueño === email)) {
+                const email = fd.get('email').toLowerCase().trim();
+                const pass = fd.get('password');
+                const nombre = fd.get('nombre');
+                const wsp = fd.get('wsp');
+
+                // Check in usuarios sheet or tiendas sheet
+                const exists = (state.usuarios && state.usuarios.some(u => u.email && u.email.toLowerCase().trim() === email)) ||
+                               (state.tiendas && state.tiendas.some(u => (u.email && u.email.toLowerCase().trim() === email) || (u.dueño && u.dueño.toLowerCase().trim() === email)));
+                
+                if (exists) {
                     showToast("El email ya está registrado", "error");
                     return;
                 }
 
-                const nombreTienda = fd.get('nombreTienda');
-                const slug = nombreTienda.toLowerCase().replace(/[^a-z0-9]/g, '-') + '-' + Math.random().toString(36).substring(2, 6);
-
-                const newTienda = {
+                const newUser = {
                     id: 'usr_' + Date.now(),
-                    nombreTienda,
-                    dueño: fd.get('dueño'),
                     email,
-                    wsp: fd.get('wsp'),
-                    password: fd.get('password'),
-                    zona: fd.get('zona'),
-                    vehiculo: fd.get('vehiculo'),
-                    slug,
-                    instagramUrl: '',
-                    facebookUrl: '',
-                    webUrl: '',
-                    fotoPerfil: '',
-                    fotosCarrusel: JSON.stringify([]),
-                    catalogo: JSON.stringify({ titulo: 'Catálogo ' + nombreTienda, desc: 'Envíos en el día en Tres Arroyos', bienvenida: '¡Gracias por elegirnos!', color: '#0f766e', destacadosIds: [], mostrarInfo: 'Si' })
+                    pass,
+                    nombre,
+                    wsp,
+                    fecha: new Date().toISOString()
                 };
 
-                state.tiendas.push(newTienda);
-                state.session = { email: newTienda.email };
+                state.usuarios.push(newUser);
+                state.session = { email, pass, nombre };
                 localStorage.setItem('ta_session', JSON.stringify(state.session));
                 state.authModalOpen = false;
 
-                postToSheets('registro', newTienda);
-                showToast("Guardado, actualizando...");
-                
+                postToSheets('registro', newUser);
+                showToast("Cuenta creada ✓");
+
+                setTimeout(() => {
+                    window.location.hash = '#mi-tienda';
+                    render();
+                }, 500);
+
                 setTimeout(() => {
                     fetchAllFromSheets(false);
-                    window.location.hash = '#t/' + slug;
                 }, 2000);
             } catch (err) {
                 console.error("Error in handleRegister:", err);
-                showToast("Error al registrar tienda", "error");
+                showToast("Error al registrar cuenta", "error");
             }
         }
 
@@ -1463,18 +1495,31 @@
             e.preventDefault();
             try {
                 const fd = new FormData(e.target);
-                const email = fd.get('email').trim();
+                const email = fd.get('email').toLowerCase().trim();
                 const pass = fd.get('password');
 
-                const user = state.tiendas.find(u => (u.email === email || u.dueño === email) && u.password === pass);
-                if (user) {
-                    state.session = { email: user.email || user.dueño };
+                console.log("Intentando login con:", email, pass);
+                console.log("Usuarios cargados en memoria:", state.usuarios);
+                console.log("Tiendas cargadas en memoria:", state.tiendas);
+
+                let foundUser = null;
+                if (state.usuarios && state.usuarios.length > 0) {
+                    foundUser = state.usuarios.find(u => u.email && u.email.toLowerCase().trim() === email && (u.pass === pass || u.password === pass));
+                }
+                if (!foundUser && state.tiendas && state.tiendas.length > 0) {
+                    foundUser = state.tiendas.find(u => ((u.email && u.email.toLowerCase().trim() === email) || (u.dueño && u.dueño.toLowerCase().trim() === email)) && (u.pass === pass || u.password === pass));
+                }
+
+                if (foundUser) {
+                    state.session = { email: foundUser.email || foundUser.dueño, nombre: foundUser.nombre || foundUser.dueño || 'Usuario' };
                     localStorage.setItem('ta_session', JSON.stringify(state.session));
                     state.authModalOpen = false;
                     showToast("¡Sesión iniciada!");
                     window.location.hash = '#mi-tienda';
+                    render();
                 } else {
-                    showToast("Email o contraseña incorrectos", "error");
+                    console.warn("Datos incorrectos para email:", email);
+                    showToast("Datos incorrectos, revisá email/pass", "error");
                 }
             } catch (err) {
                 console.error("Error in handleLogin:", err);
@@ -1489,11 +1534,51 @@
             window.location.hash = '';
         }
 
+        async function handleCreateStoreWizard(e) {
+            e.preventDefault();
+            try {
+                const fd = new FormData(e.target);
+                const nombreTienda = fd.get('nombreTienda');
+                const slug = nombreTienda.toLowerCase().replace(/[^a-z0-9]/g, '-') + '-' + Math.random().toString(36).substring(2, 6);
+                const email = state.session ? state.session.email : 'contacto@market.ar';
+
+                const newTienda = {
+                    id: 'tienda_' + Date.now(),
+                    nombreTienda,
+                    dueño: fd.get('dueño'),
+                    email,
+                    wsp: fd.get('wsp'),
+                    zona: fd.get('zona'),
+                    vehiculo: fd.get('vehiculo'),
+                    slug,
+                    instagramUrl: '',
+                    facebookUrl: '',
+                    webUrl: '',
+                    fotoPerfil: '',
+                    fotosCarrusel: JSON.stringify([]),
+                    catalogo: JSON.stringify({ titulo: 'Catálogo ' + nombreTienda, desc: 'Envíos en el día en Tres Arroyos', bienvenida: '¡Gracias por elegirnos!', color: '#0f766e', destacadosIds: [], mostrarInfo: 'Si' })
+                };
+
+                state.tiendas.push(newTienda);
+                postToSheets('crear_tienda', newTienda);
+                showToast("¡Tienda creada con éxito!");
+                
+                setTimeout(() => {
+                    fetchAllFromSheets(false);
+                    render();
+                }, 1500);
+            } catch (err) {
+                console.error("Error creating store wizard:", err);
+                showToast("Error al crear tienda", "error");
+            }
+        }
+
         async function handleCreateProduct(e) {
             e.preventDefault();
             try {
                 const fd = new FormData(e.target);
-                const vendor = state.tiendas.find(u => u.email === state.session.email || u.dueño === state.session.email);
+                const sessionEmail = state.session ? state.session.email.toLowerCase().trim() : '';
+                const vendor = state.tiendas.find(u => (u.email && u.email.toLowerCase().trim() === sessionEmail) || (u.dueño && u.dueño.toLowerCase().trim() === sessionEmail));
                 if (!vendor) return;
 
                 const fotosInput = document.getElementById('new-prod-fotos');
@@ -1504,7 +1589,7 @@
 
                 const newProd = {
                     id: 'prod_' + Math.random().toString(36).substring(2, 8),
-                    vendorEmail: vendor.email,
+                    vendorEmail: vendor.email || sessionEmail,
                     tiendaSlug: vendor.slug,
                     nombre: fd.get('nombre'),
                     precio: Number(fd.get('precio')),
@@ -1592,7 +1677,8 @@
             e.preventDefault();
             try {
                 const fd = new FormData(e.target);
-                const v = state.tiendas.find(u => u.email === state.session.email || u.dueño === state.session.email);
+                const sessionEmail = state.session ? state.session.email.toLowerCase().trim() : '';
+                const v = state.tiendas.find(u => (u.email && u.email.toLowerCase().trim() === sessionEmail) || (u.dueño && u.dueño.toLowerCase().trim() === sessionEmail));
                 if (!v) return;
 
                 v.nombreTienda = fd.get('nombreTienda');
@@ -1636,7 +1722,8 @@
             e.preventDefault();
             try {
                 const fd = new FormData(e.target);
-                const v = state.tiendas.find(u => u.email === state.session.email || u.dueño === state.session.email);
+                const sessionEmail = state.session ? state.session.email.toLowerCase().trim() : '';
+                const v = state.tiendas.find(u => (u.email && u.email.toLowerCase().trim() === sessionEmail) || (u.dueño && u.dueño.toLowerCase().trim() === sessionEmail));
                 if (!v) return;
 
                 const destacadosIds = Array.from(e.target.querySelectorAll('input[name="destacado"]:checked')).map(cb => cb.value);
@@ -1671,7 +1758,7 @@
         async function enviarPedidoWhatsApp(productId) {
             try {
                 const p = state.productos.find(prod => prod.id === productId);
-                const vendor = state.tiendas.find(u => u.email === p.vendorEmail || u.slug === p.tiendaSlug);
+                const vendor = state.tiendas.find(u => (u.email && u.email === p.vendorEmail) || (u.slug && u.slug === p.tiendaSlug));
                 if (!p || !vendor) return;
 
                 const cant = state.checkoutData.cant;
@@ -1695,7 +1782,7 @@
 
                 const newOrder = {
                     id: 'ord_' + Date.now(),
-                    vendorEmail: vendor.email,
+                    vendorEmail: vendor.email || '',
                     tiendaNombre: vendor.nombreTienda,
                     productoId: p.id,
                     productoNombre: p.nombre,
