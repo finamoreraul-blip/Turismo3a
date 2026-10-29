@@ -120,8 +120,6 @@
             authTab: 'login',
             authModalOpen: false,
             selectedProductModal: null,
-            editStoreModalOpen: false,
-            editCatalogModalOpen: false,
             editProductModal: null,
             checkoutData: { cant: 1, cliente: '', direccion: '', nota: '', flash: false },
             adminAuthed: sessionStorage.getItem('ta_admin_auth') === 'true',
@@ -136,7 +134,7 @@
         const CATEGORIES = ['Todos', 'Alimentos', 'Servicios', 'Indumentaria', 'Hogar y Deco', 'Belleza', 'Oficios', 'Tecnología', 'Vehículos'];
         const ZONES_TRES_ARROYOS = ['Centro', 'Barrio Norte', 'Barrio Sur', 'Villa Italia', 'Villa Primavera', 'Quintas', 'Planta Urbana General'];
 
-        // --- COMPRESSION (800px, quality 0.6) ---
+        // --- COMPRESSION ---
         async function compressImage(file, maxWidth = 800, quality = 0.6) {
             return new Promise((resolve) => {
                 if (!file) {
@@ -186,7 +184,7 @@
             }
         }
 
-        // --- FETCH MASTER FROM SHEETS WITH DEBOUNCE & EDIT LOCK ---
+        // --- FETCH MASTER FROM SHEETS ---
         async function fetchAllFromSheets(isBackground = false) {
             if (isEditing) return;
             if (isFetching) return;
@@ -256,7 +254,6 @@
             fetchAllFromSheets(false);
         }
 
-        // --- POST TO SHEETS (NO-CORS, FIRE & FORGET) ---
         function postToSheets(action, payload) {
             try {
                 fetch(SHEET_URL, {
@@ -329,7 +326,7 @@
                 hashSlug = hash.replace('#t/', '');
             } else if (hash.startsWith('#c/')) {
                 hashSlug = hash.replace('#c/', '');
-            } else if (hash.startsWith('#') && hash !== '#admin' && hash !== '#mi-tienda' && hash !== '#crear-tienda' && hash !== '#editar-tienda') {
+            } else if (hash.startsWith('#') && hash !== '#admin' && hash !== '#mi-tienda' && hash !== '#crear-tienda' && !hash.startsWith('#editar-tienda') && hash !== '#mis-productos') {
                 hashSlug = hash.replace('#', '');
             }
 
@@ -339,11 +336,23 @@
                 state.currentView = 'admin';
                 state.activeSlug = null;
                 isEditing = false;
-            } else if (hash.startsWith('#mi-tienda') || hash.startsWith('#crear-tienda') || hash.startsWith('#editar-tienda')) {
+            } else if (hash.startsWith('#mi-tienda')) {
                 state.currentView = 'mi-tienda';
                 state.activeSlug = null;
+                isEditing = false;
+            } else if (hash.startsWith('#crear-tienda')) {
+                state.currentView = 'crear-tienda';
+                state.activeSlug = null;
                 isEditing = true;
-            } else if (targetSlug && targetSlug !== 'mi-tienda' && targetSlug !== 'crear-tienda' && targetSlug !== 'editar-tienda' && targetSlug !== 'admin') {
+            } else if (hash.startsWith('#editar-tienda')) {
+                state.currentView = 'editar-tienda';
+                state.activeSlug = null;
+                isEditing = true;
+            } else if (hash.startsWith('#mis-productos')) {
+                state.currentView = 'mis-productos';
+                state.activeSlug = null;
+                isEditing = false;
+            } else if (targetSlug && targetSlug !== 'mi-tienda' && targetSlug !== 'crear-tienda' && !targetSlug.startsWith('editar-tienda') && targetSlug !== 'mis-productos' && targetSlug !== 'admin') {
                 state.currentView = 'tienda-publica';
                 state.activeSlug = targetSlug;
                 isEditing = false;
@@ -379,7 +388,13 @@
             if (state.currentView === 'admin') {
                 html = renderAdminView();
             } else if (state.currentView === 'mi-tienda') {
-                html = renderMiTiendaView();
+                html = renderMiPanel();
+            } else if (state.currentView === 'crear-tienda') {
+                html = renderCrearTienda();
+            } else if (state.currentView === 'editar-tienda') {
+                html = renderEditarTienda();
+            } else if (state.currentView === 'mis-productos') {
+                html = renderMisProductos();
             } else if (state.currentView === 'tienda-publica') {
                 html = renderTiendaPublicaView();
             } else {
@@ -393,14 +408,17 @@
 
         // --- SOCIAL BUTTONS HELPER ---
         function renderSocialButtons(v) {
-            let hasAny = v.instagramUrl || v.wsp || v.facebookUrl || v.webUrl;
+            let hasAny = v.instagramUrl || v.instagram || v.wsp || v.facebookUrl || v.facebook || v.webUrl || v.web;
             if (!hasAny) return '';
 
             let buttonsHtml = '';
+            let ig = v.instagramUrl || v.instagram;
+            let fb = v.facebookUrl || v.facebook;
+            let wb = v.webUrl || v.web;
             
-            if (v.instagramUrl) {
+            if (ig) {
                 buttonsHtml += `
-                    <a href="${v.instagramUrl}" target="_blank" style="height: 48px; border-radius: 14px; background: linear-gradient(135deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);" class="text-white font-semibold text-xs flex items-center justify-center gap-2 shadow-sm hover:opacity-95 transition">
+                    <a href="${ig}" target="_blank" style="height: 48px; border-radius: 14px; background: linear-gradient(135deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);" class="text-white font-semibold text-xs flex items-center justify-center gap-2 shadow-sm hover:opacity-95 transition">
                         <span class="text-base">📷</span> Instagram
                     </a>
                 `;
@@ -414,17 +432,17 @@
                 `;
             }
 
-            if (v.facebookUrl) {
+            if (fb) {
                 buttonsHtml += `
-                    <a href="${v.facebookUrl}" target="_blank" style="height: 48px; border-radius: 14px; background-color: #1877F2;" class="text-white font-semibold text-xs flex items-center justify-center gap-2 shadow-sm hover:opacity-95 transition">
+                    <a href="${fb}" target="_blank" style="height: 48px; border-radius: 14px; background-color: #1877F2;" class="text-white font-semibold text-xs flex items-center justify-center gap-2 shadow-sm hover:opacity-95 transition">
                         <span class="text-base">📘</span> Facebook
                     </a>
                 `;
             }
 
-            if (v.webUrl) {
+            if (wb) {
                 buttonsHtml += `
-                    <a href="${v.webUrl}" target="_blank" style="height: 48px; border-radius: 14px; background-color: #111111;" class="text-white font-semibold text-xs flex items-center justify-center gap-2 shadow-sm hover:opacity-95 transition">
+                    <a href="${wb}" target="_blank" style="height: 48px; border-radius: 14px; background-color: #111111;" class="text-white font-semibold text-xs flex items-center justify-center gap-2 shadow-sm hover:opacity-95 transition">
                         <span class="text-base">🌐</span> Sitio Web
                     </a>
                 `;
@@ -737,11 +755,11 @@
         }
 
         // ==========================================
-        // 3. VENDOR PANEL (#mi-tienda / #crear-tienda)
+        // 3. MI PANEL VENDEDOR (#mi-tienda)
         // ==========================================
-        function renderMiTiendaView() {
+        function renderMiPanel() {
+            isEditing = false;
             if (!state.session) {
-                isEditing = false;
                 return `
                     <div class="max-w-md mx-auto px-4 py-20 text-center space-y-4">
                         <span class="text-5xl block">🔒</span>
@@ -759,132 +777,357 @@
             }
 
             const sessionEmail = state.session.email.toLowerCase().trim();
-            let vendor = state.tiendas.find(u => (u.email && u.email.toLowerCase().trim() === sessionEmail) || (u.dueño && u.dueño.toLowerCase().trim() === sessionEmail));
-            
-            // If user doesn't have a store yet, set isEditing = true and render wizard
-            if (!vendor) {
-                isEditing = true;
+            const sessionName = state.session.nombre || 'Emprendedor';
+            let miTienda = state.tiendas.find(t => (t.email && t.email.toLowerCase().trim() === sessionEmail) || (t.dueño && t.dueño.toLowerCase().trim() === sessionEmail));
+
+            // Si NO tiene tienda
+            if (!miTienda) {
                 return `
                     <header class="bg-white shadow-sm sticky top-0 z-40 w-full">
                         <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
-                            <a href="#" onclick="isEditing=false;" class="text-teal-800 text-sm font-bold">← Volver al Market</a>
+                            <a href="#" class="text-teal-800 text-sm font-bold">← Ir al Market</a>
                             <button onclick="logout()" class="bg-rose-50 text-rose-700 text-xs px-3 py-2 rounded-xl font-bold">Cerrar Sesión</button>
                         </div>
                     </header>
-                    <main class="max-w-xl mx-auto px-4 py-8 flex-1 w-full space-y-6">
-                        <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 space-y-4">
-                            <div class="text-center">
-                                <span class="text-4xl">🏪</span>
-                                <h1 class="text-xl font-extrabold text-slate-900 mt-2">¡Configurá tu Tienda!</h1>
-                                <p class="text-xs text-slate-500 mt-1">Ya iniciaste sesión, ahora completá los datos de tu emprendimiento en Tres Arroyos.</p>
-                            </div>
-                            <form onsubmit="handleCreateStoreWizard(event)" class="space-y-3">
-                                <div>
-                                    <label class="text-xs font-semibold text-slate-700">Nombre de Tienda</label>
-                                    <input type="text" name="nombreTienda" required placeholder="Ej: Hamburguesas Don Carlos" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm mt-1">
-                                </div>
-                                <div>
-                                    <label class="text-xs font-semibold text-slate-700">Dueño / Responsable</label>
-                                    <input type="text" name="dueño" value="${state.session.nombre || ''}" required placeholder="Ej: Carlos Gómez" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm mt-1">
-                                </div>
-                                <div>
-                                    <label class="text-xs font-semibold text-slate-700">Descripción corta o rubro</label>
-                                    <textarea name="descripcion" rows="2" placeholder="Ej: Las mejores hamburguesas artesanales..." class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm mt-1"></textarea>
-                                </div>
-                                <div class="grid grid-cols-2 gap-3">
-                                    <div>
-                                        <label class="text-xs font-semibold text-slate-700">WhatsApp (Ej: 2983445566)</label>
-                                        <input type="text" name="wsp" required placeholder="2983445566" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm mt-1">
-                                    </div>
-                                    <div>
-                                        <label class="text-xs font-semibold text-slate-700">Zona</label>
-                                        <select name="zona" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm mt-1">
-                                            ${ZONES_TRES_ARROYOS.map(z => `<option value="${z}">${z}</option>`).join('')}
-                                        </select>
-                                    </div>
-                                </div>
-                                <div class="grid grid-cols-2 gap-3">
-                                    <div>
-                                        <label class="text-xs font-semibold text-slate-700">Dirección</label>
-                                        <input type="text" name="direccion" placeholder="Ej: San Martín 450" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm mt-1">
-                                    </div>
-                                    <div>
-                                        <label class="text-xs font-semibold text-slate-700">¿Vehículo Propio?</label>
-                                        <select name="vehiculo" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm mt-1">
-                                            <option value="Si">Si</option>
-                                            <option value="No">No (Usaré servicio Flash)</option>
-                                        </select>
-                                    </div>
-                                </div>
-                                <div>
-                                    <label class="text-xs font-semibold text-slate-700">Logo / Foto de Perfil (Opcional)</label>
-                                    <input type="file" name="fotoPerfil" accept="image/*" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-3 py-2 text-xs mt-1">
-                                </div>
-                                <button type="submit" class="w-full h-12 bg-teal-700 hover:bg-teal-800 text-white font-bold rounded-2xl shadow transition text-sm mt-2">Crear mi Tienda Ahora</button>
-                            </form>
+                    <div class="max-w-md mx-auto px-4 py-24 text-center space-y-4">
+                        <span class="text-5xl block">🏪</span>
+                        <h2 class="text-xl font-bold text-slate-800">Aún no creaste tu tienda</h2>
+                        <p class="text-slate-500 text-sm">Configurá tu emprendimiento en Tres Arroyos para empezar a vender.</p>
+                        <div class="pt-2">
+                            <a href="#crear-tienda" class="inline-block bg-teal-700 hover:bg-teal-800 text-white font-bold px-8 py-4 rounded-2xl shadow transition text-sm">Crear mi tienda ahora</a>
                         </div>
-                    </main>
+                    </div>
                 `;
             }
 
-            isEditing = false;
-            const myProducts = state.productos.filter(p => (p.vendorEmail && p.vendorEmail.toLowerCase().trim() === sessionEmail) || (p.tiendaSlug && p.tiendaSlug === vendor.slug));
-            const myOrders = state.pedidos.filter(o => (o.vendorEmail && o.vendorEmail.toLowerCase().trim() === sessionEmail) || (o.tiendaNombre && o.tiendaNombre.toLowerCase().trim() === vendor.nombreTienda.toLowerCase().trim()));
-            const flashOrdersCount = myOrders.filter(o => o.flash === true || o.flash === 'true' || o.flash === 'TRUE').length;
-            const publicLink = `${window.location.origin}${window.location.pathname}#t/${vendor.slug}`;
+            // Si SÍ tiene tienda -> PANEL VENDEDOR COMPLETO
+            const publicLink = `${window.location.origin}${window.location.pathname}#t/${miTienda.slug}`;
+
+            return `
+                <header class="bg-white shadow-sm sticky top-0 z-40 w-full">
+                    <div class="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
+                        <a href="#" class="text-teal-800 text-sm font-bold">← Ir al Market</a>
+                        <button onclick="logout()" class="bg-rose-50 text-rose-700 text-xs px-3 py-2 rounded-xl font-bold">Cerrar Sesión</button>
+                    </div>
+                </header>
+
+                <main class="max-w-4xl mx-auto px-4 py-8 flex-1 w-full space-y-6">
+                    <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                        <div class="space-y-1">
+                            <div class="flex items-center gap-2">
+                                <span class="text-xs bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full font-bold">● Activa</span>
+                                <span class="text-xs text-slate-500">Tres Arroyos, B.A.</span>
+                            </div>
+                            <h1 class="text-2xl font-extrabold text-slate-900">Hola ${sessionName}</h1>
+                            <p class="text-sm font-semibold text-teal-800">Tu tienda: ${miTienda.nombreTienda}</p>
+                        </div>
+                        <img src="${miTienda.fotoPerfil || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200'}" class="w-16 h-16 rounded-2xl object-cover border border-slate-200 shadow-sm">
+                    </div>
+
+                    <!-- GRID 2x2 BOTONES -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <a href="#t/${miTienda.slug}" class="bg-teal-700 hover:bg-teal-800 text-white p-6 rounded-3xl shadow transition flex flex-col justify-between gap-4 group">
+                            <span class="text-3xl">👁️</span>
+                            <div>
+                                <h3 class="text-lg font-bold">Ver mi tienda</h3>
+                                <p class="text-xs text-teal-100 mt-0.5">Vista previa como la ven tus clientes en el market.</p>
+                            </div>
+                        </a>
+
+                        <a href="#editar-tienda/${miTienda.slug}" class="bg-slate-900 hover:bg-slate-800 text-white p-6 rounded-3xl shadow transition flex flex-col justify-between gap-4 group">
+                            <span class="text-3xl">⚙️</span>
+                            <div>
+                                <h3 class="text-lg font-bold">Editar tienda</h3>
+                                <p class="text-xs text-slate-300 mt-0.5">Modificá datos, horarios, redes sociales y fotos.</p>
+                            </div>
+                        </a>
+
+                        <a href="#mis-productos" class="bg-teal-800 hover:bg-teal-900 text-white p-6 rounded-3xl shadow transition flex flex-col justify-between gap-4 group">
+                            <span class="text-3xl">📦</span>
+                            <div>
+                                <h3 class="text-lg font-bold">Mis Productos / Catálogo</h3>
+                                <p class="text-xs text-teal-100 mt-0.5">Agregá nuevos productos, pausá o eliminalos.</p>
+                            </div>
+                        </a>
+
+                        <div onclick="document.getElementById('pedidos-section').scrollIntoView({behavior:'smooth'});" class="bg-slate-800 hover:bg-slate-700 text-white p-6 rounded-3xl shadow transition flex flex-col justify-between gap-4 cursor-pointer group">
+                            <span class="text-3xl">📋</span>
+                            <div>
+                                <h3 class="text-lg font-bold">Pedidos recibidos</h3>
+                                <p class="text-xs text-slate-300 mt-0.5">Revisá los pedidos que te llegaron por WhatsApp.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 space-y-3">
+                        <h4 class="text-xs font-bold uppercase tracking-wider text-slate-500">🔗 Compartir link directo de tu tienda</h4>
+                        <div class="flex gap-2">
+                            <input type="text" readonly value="${publicLink}" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-xs text-slate-700 focus:outline-none">
+                            <button onclick="navigator.clipboard.writeText('${publicLink}'); showToast('¡Link copiado!');" class="bg-teal-700 text-white text-xs px-5 py-3 rounded-2xl font-bold whitespace-nowrap shadow hover:bg-teal-800 transition">Copiar Link</button>
+                        </div>
+                    </div>
+
+                    <div id="pedidos-section" class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 space-y-4">
+                        <h3 class="text-lg font-bold text-slate-900">📋 Historial de Pedidos Recibidos</h3>
+                        ${renderMisPedidosList(miTienda)}
+                    </div>
+
+                    <div class="text-center pt-4">
+                        <button onclick="logout()" class="text-xs text-rose-600 font-bold underline hover:text-rose-700">Cerrar Sesión</button>
+                    </div>
+                </main>
+            `;
+        }
+
+        function renderMisPedidosList(miTienda) {
+            const sessionEmail = state.session ? state.session.email.toLowerCase().trim() : '';
+            const myOrders = state.pedidos.filter(o => (o.vendorEmail && o.vendorEmail.toLowerCase().trim() === sessionEmail) || (o.tiendaNombre && o.tiendaNombre.toLowerCase().trim() === miTienda.nombreTienda.toLowerCase().trim()));
+            
+            if (myOrders.length === 0) {
+                return `<p class="text-slate-500 text-sm text-center py-6">Aún no recibiste pedidos de clientes.</p>`;
+            }
+
+            return `
+                <div class="space-y-3">
+                    ${myOrders.map(o => `
+                        <div class="border border-slate-200 rounded-2xl p-4 bg-slate-50 space-y-2 text-xs">
+                            <div class="flex justify-between items-center font-bold text-slate-800 text-sm">
+                                <span>📦 ${o.productoNombre || 'Producto'} x${o.cantidad || 1}</span>
+                                <span class="text-teal-800">$${Number(o.totalCliente || o.subtotal || 0).toLocaleString('es-AR')}</span>
+                            </div>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-1 text-slate-600">
+                                <div><b>Cliente:</b> ${o.cliente || 'Anónimo'}</div>
+                                <div><b>Dirección:</b> ${o.direccion || 'Tres Arroyos'}</div>
+                                <div><b>Fecha:</b> ${o.fecha ? new Date(o.fecha).toLocaleString() : 'Reciente'}</div>
+                                <div><b>Envío Flash:</b> ${(o.flash === true || o.flash === 'true' || o.flash === 'TRUE') ? '<span class="text-amber-700 font-bold">SI (Comisión 10% + $2000)</span>' : 'No (Envío propio)'}</div>
+                            </div>
+                            ${o.nota ? `<div class="bg-white p-2 rounded-xl border border-slate-200 text-slate-700"><b>Nota:</b> ${o.nota}</div>` : ''}
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        // ==========================================
+        // 4. CREAR TIENDA WIZARD (#crear-tienda)
+        // ==========================================
+        function renderCrearTienda() {
+            isEditing = true;
+            if (!state.session) {
+                return `
+                    <div class="max-w-md mx-auto px-4 py-20 text-center space-y-4">
+                        <span class="text-5xl block">🔒</span>
+                        <h2 class="text-xl font-bold text-slate-800">Acceso restringido</h2>
+                        <p class="text-slate-500 text-sm">Primero iniciá sesión o registrate para crear tu tienda.</p>
+                        <div class="pt-2"><button onclick="openAuthModal('login')" class="bg-teal-700 text-white font-medium px-5 py-3 rounded-2xl">Iniciar Sesión</button></div>
+                    </div>
+                `;
+            }
+
+            const sessionEmail = state.session.email.toLowerCase().trim();
+            const existing = state.tiendas.find(t => (t.email && t.email.toLowerCase().trim() === sessionEmail) || (t.dueño && t.dueño.toLowerCase().trim() === sessionEmail));
+            if (existing) {
+                window.location.hash = '#mi-tienda';
+                return '';
+            }
 
             return `
                 <header class="bg-white shadow-sm sticky top-0 z-40 w-full">
                     <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
-                        <a href="#" class="text-teal-800 text-sm font-bold">← Ir al Market</a>
-                        <div class="flex items-center gap-2">
-                            <button onclick="logout()" class="bg-rose-50 text-rose-700 text-xs px-3 py-2 rounded-xl font-bold">Cerrar Sesión</button>
+                        <a href="#mi-tienda" onclick="isEditing=false;" class="text-teal-800 text-sm font-bold">← Volver al Panel</a>
+                        <button onclick="logout()" class="bg-rose-50 text-rose-700 text-xs px-3 py-2 rounded-xl font-bold">Cerrar Sesión</button>
+                    </div>
+                </header>
+                <main class="max-w-xl mx-auto px-4 py-8 flex-1 w-full space-y-6">
+                    <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 space-y-4">
+                        <div class="text-center">
+                            <span class="text-4xl">🏪</span>
+                            <h1 class="text-xl font-extrabold text-slate-900 mt-2">¡Configurá tu Tienda!</h1>
+                            <p class="text-xs text-slate-500 mt-1">Completá los datos de tu emprendimiento en Tres Arroyos.</p>
                         </div>
+                        <form onsubmit="handleCreateStoreWizard(event)" class="space-y-3">
+                            <div>
+                                <label class="text-xs font-semibold text-slate-700">Nombre de Tienda</label>
+                                <input type="text" name="nombreTienda" required placeholder="Ej: Hamburguesas Don Carlos" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm mt-1">
+                            </div>
+                            <div>
+                                <label class="text-xs font-semibold text-slate-700">Dueño / Responsable</label>
+                                <input type="text" name="dueño" value="${state.session.nombre || ''}" required placeholder="Ej: Carlos Gómez" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm mt-1">
+                            </div>
+                            <div>
+                                <label class="text-xs font-semibold text-slate-700">Descripción corta o rubro</label>
+                                <textarea name="descripcion" rows="2" placeholder="Ej: Las mejores hamburguesas artesanales..." class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm mt-1"></textarea>
+                            </div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="text-xs font-semibold text-slate-700">WhatsApp (Ej: 2983445566)</label>
+                                    <input type="text" name="wsp" required placeholder="2983445566" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm mt-1">
+                                </div>
+                                <div>
+                                    <label class="text-xs font-semibold text-slate-700">Zona</label>
+                                    <select name="zona" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm mt-1">
+                                        ${ZONES_TRES_ARROYOS.map(z => `<option value="${z}">${z}</option>`).join('')}
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="text-xs font-semibold text-slate-700">Dirección</label>
+                                    <input type="text" name="direccion" placeholder="Ej: San Martín 450" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm mt-1">
+                                </div>
+                                <div>
+                                    <label class="text-xs font-semibold text-slate-700">¿Vehículo Propio?</label>
+                                    <select name="vehiculo" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm mt-1">
+                                        <option value="Si">Si</option>
+                                        <option value="No">No (Usaré servicio Flash)</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="text-xs font-semibold text-slate-700">Logo / Foto de Perfil (Opcional)</label>
+                                <input type="file" name="fotoPerfil" accept="image/*" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-3 py-2 text-xs mt-1">
+                            </div>
+                            <button type="submit" class="w-full h-12 bg-teal-700 hover:bg-teal-800 text-white font-bold rounded-2xl shadow transition text-sm mt-2">Crear mi Tienda Ahora</button>
+                        </form>
+                    </div>
+                </main>
+            `;
+        }
+
+        // ==========================================
+        // 5. EDITAR TIENDA (#editar-tienda/SLUG)
+        // ==========================================
+        function renderEditarTienda() {
+            isEditing = true;
+            if (!state.session) {
+                window.location.hash = '#mi-tienda';
+                return '';
+            }
+
+            const sessionEmail = state.session.email.toLowerCase().trim();
+            const v = state.tiendas.find(t => (t.email && t.email.toLowerCase().trim() === sessionEmail) || (t.dueño && t.dueño.toLowerCase().trim() === sessionEmail));
+            
+            if (!v) {
+                window.location.hash = '#crear-tienda';
+                return '';
+            }
+
+            return `
+                <header class="bg-white shadow-sm sticky top-0 z-40 w-full">
+                    <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
+                        <a href="#mi-tienda" onclick="isEditing=false;" class="text-teal-800 text-sm font-bold">← Volver al Panel</a>
+                        <button onclick="logout()" class="bg-rose-50 text-rose-700 text-xs px-3 py-2 rounded-xl font-bold">Cerrar Sesión</button>
                     </div>
                 </header>
 
-                <main class="max-w-5xl mx-auto px-4 py-6 flex-1 w-full space-y-6">
+                <main class="max-w-xl mx-auto px-4 py-8 flex-1 w-full space-y-6">
                     <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 space-y-4">
-                        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                        <div>
+                            <span class="text-xs text-teal-700 font-bold uppercase tracking-wider">⚙️ Configuración</span>
+                            <h1 class="text-xl font-extrabold text-slate-900 mt-1">Editar Ficha y Redes</h1>
+                        </div>
+
+                        <form onsubmit="handleSaveStore(event)" class="space-y-3">
                             <div>
-                                <span class="text-xs bg-teal-50 text-teal-800 px-3 py-1 rounded-full font-semibold">Panel de Local</span>
-                                <h1 class="text-2xl font-extrabold text-slate-900 mt-1">Hola, ${vendor.nombreTienda}</h1>
-                                <p class="text-xs text-slate-500 mt-0.5">Link público: <a href="#t/${vendor.slug}" class="text-teal-700 underline font-medium">tresarroyosmarket.com.ar/#t/${vendor.slug}</a></p>
+                                <label class="text-xs font-semibold text-slate-700">Nombre de Tienda</label>
+                                <input type="text" name="nombreTienda" value="${v.nombreTienda || ''}" required class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-sm mt-1">
                             </div>
-                            <div class="flex flex-wrap gap-2 w-full md:w-auto">
-                                <button onclick="navigator.clipboard.writeText('${publicLink}'); showToast('¡Link copiado al portapapeles!');" class="bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs px-4 py-3 rounded-2xl font-semibold transition flex-1 md:flex-initial">📋 Copiar Link</button>
-                                <a href="#t/${vendor.slug}" class="bg-teal-700 hover:bg-teal-800 text-white text-xs px-4 py-3 rounded-2xl font-semibold transition text-center flex-1 md:flex-initial">👁️ Ver mi Tienda</a>
+                            <div>
+                                <label class="text-xs font-semibold text-slate-700">Descripción</label>
+                                <textarea name="descripcion" rows="2" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-sm mt-1">${v.descripcion || ''}</textarea>
                             </div>
-                        </div>
-
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-100">
-                            <button onclick="openEditStoreModal()" class="bg-slate-900 text-white font-semibold py-3 px-4 rounded-2xl text-sm flex items-center justify-center gap-2 hover:bg-slate-800 transition">
-                                ⚙️ Editar Mi Tienda y Redes
-                            </button>
-                            <button onclick="openEditCatalogModal()" class="bg-teal-800 text-white font-semibold py-3 px-4 rounded-2xl text-sm flex items-center justify-center gap-2 hover:bg-teal-900 transition">
-                                🎨 Editar Mi Catálogo (Banner y Destacados)
-                            </button>
-                        </div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="text-xs font-semibold text-slate-700">Dirección</label>
+                                    <input type="text" name="direccion" value="${v.direccion || ''}" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-sm mt-1">
+                                </div>
+                                <div>
+                                    <label class="text-xs font-semibold text-slate-700">Zona</label>
+                                    <select name="zona" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-sm mt-1">
+                                        ${ZONES_TRES_ARROYOS.map(z => `<option value="${z}" ${v.zona === z ? 'selected' : ''}>${z}</option>`).join('')}
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="text-xs font-semibold text-slate-700">WhatsApp</label>
+                                    <input type="text" name="wsp" value="${v.wsp || ''}" required class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-sm mt-1">
+                                </div>
+                                <div>
+                                    <label class="text-xs font-semibold text-slate-700">Horarios</label>
+                                    <input type="text" name="horario" value="${v.horario || 'Lunes a Sábados 9 a 20hs'}" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-sm mt-1">
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="text-xs font-semibold text-slate-700">Link Instagram</label>
+                                    <input type="url" name="instagramUrl" placeholder="https://instagram.com/tutienda" value="${v.instagramUrl || v.instagram || ''}" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-sm mt-1">
+                                </div>
+                                <div>
+                                    <label class="text-xs font-semibold text-slate-700">Link Facebook</label>
+                                    <input type="url" name="facebookUrl" placeholder="https://facebook.com/tutienda" value="${v.facebookUrl || v.facebook || ''}" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-sm mt-1">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="text-xs font-semibold text-slate-700">Link Web Personal</label>
+                                <input type="url" name="webUrl" placeholder="https://tutienda.com" value="${v.webUrl || v.web || ''}" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-sm mt-1">
+                            </div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="text-xs font-semibold text-slate-700">¿Vehículo Propio?</label>
+                                    <select name="vehiculo" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-sm mt-1">
+                                        <option value="Si" ${v.vehiculo === 'Si' ? 'selected' : ''}>Si</option>
+                                        <option value="No" ${v.vehiculo === 'No' ? 'selected' : ''}>No</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="text-xs font-semibold text-slate-700">Foto de Perfil / Logo</label>
+                                <input type="file" name="fotoPerfil" accept="image/*" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-3 py-2 text-xs">
+                            </div>
+                            <div>
+                                <label class="text-xs font-semibold text-slate-700">Fotos Carrusel del Local (Hasta 6)</label>
+                                <input type="file" name="fotosCarrusel" accept="image/*" multiple class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-3 py-2 text-xs">
+                            </div>
+                            <button type="submit" class="w-full h-12 bg-teal-700 hover:bg-teal-800 text-white font-bold rounded-2xl shadow transition text-sm">Guardar Cambios de Tienda</button>
+                        </form>
                     </div>
+                </main>
+            `;
+        }
 
-                    <div class="grid grid-cols-3 gap-3">
-                        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm text-center">
-                            <span class="text-2xl font-extrabold text-teal-800 block">${myProducts.length}</span>
-                            <span class="text-[11px] text-slate-500 font-semibold uppercase">Activos</span>
-                        </div>
-                        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm text-center">
-                            <span class="text-2xl font-extrabold text-teal-800 block">${myOrders.length}</span>
-                            <span class="text-[11px] text-slate-500 font-semibold uppercase">Pedidos</span>
-                        </div>
-                        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm text-center">
-                            <span class="text-2xl font-extrabold text-teal-800 block">${flashOrdersCount}</span>
-                            <span class="text-[11px] text-slate-500 font-semibold uppercase">Ventas Flash</span>
-                        </div>
+        // ==========================================
+        // 6. MIS PRODUCTOS (#mis-productos)
+        // ==========================================
+        function renderMisProductos() {
+            isEditing = false;
+            if (!state.session) {
+                window.location.hash = '#mi-tienda';
+                return '';
+            }
+
+            const sessionEmail = state.session.email.toLowerCase().trim();
+            const vendor = state.tiendas.find(t => (t.email && t.email.toLowerCase().trim() === sessionEmail) || (t.dueño && t.dueño.toLowerCase().trim() === sessionEmail));
+            
+            if (!vendor) {
+                window.location.hash = '#crear-tienda';
+                return '';
+            }
+
+            const myProducts = state.productos.filter(p => (p.vendorEmail && p.vendorEmail.toLowerCase().trim() === sessionEmail) || (p.tiendaSlug && p.tiendaSlug === vendor.slug));
+
+            return `
+                <header class="bg-white shadow-sm sticky top-0 z-40 w-full">
+                    <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
+                        <a href="#mi-tienda" class="text-teal-800 text-sm font-bold">← Volver al Panel</a>
+                        <button onclick="logout()" class="bg-rose-50 text-rose-700 text-xs px-3 py-2 rounded-xl font-bold">Cerrar Sesión</button>
                     </div>
+                </header>
 
-                    <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200">
-                        <h2 class="text-lg font-bold text-slate-900 mb-4">➕ Agregar Nuevo Producto</h2>
-                        <form id="create-product-form" onsubmit="handleCreateProduct(event)" class="space-y-4">
+                <main class="max-w-4xl mx-auto px-4 py-8 flex-1 w-full space-y-6">
+                    <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 space-y-4">
+                        <h2 class="text-lg font-bold text-slate-900">➕ Agregar Nuevo Producto</h2>
+                        <form onsubmit="handleCreateProduct(event)" class="space-y-4">
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div class="space-y-1">
                                     <label class="text-xs font-semibold text-slate-700">Nombre del Producto</label>
@@ -905,24 +1148,13 @@
                                 </div>
                                 <div class="space-y-1">
                                     <label class="text-xs font-semibold text-slate-700">Fotos del Producto (Hasta 6)</label>
-                                    <input type="file" name="fotos" accept="image/*" multiple id="new-prod-fotos" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-3 py-2 text-xs file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100">
+                                    <input type="file" name="fotos" accept="image/*" multiple id="new-prod-fotos" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-3 py-2 text-xs">
                                 </div>
                             </div>
 
                             <div class="space-y-1">
                                 <label class="text-xs font-semibold text-slate-700">Descripción Corta</label>
                                 <textarea name="descripcion" rows="2" placeholder="Detalles, ingredientes, tamaño..." class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-teal-700"></textarea>
-                            </div>
-
-                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-                                <div class="flex items-center gap-2">
-                                    <input type="checkbox" name="stock" value="Si" checked id="stock-check" class="w-4 h-4 text-teal-700 rounded border-slate-300">
-                                    <label for="stock-check" class="text-xs font-semibold text-slate-700">Stock disponible</label>
-                                </div>
-                                <div class="flex items-center gap-2">
-                                    <input type="checkbox" name="envioPropio" value="Si" id="envio-check" class="w-4 h-4 text-teal-700 rounded border-slate-300">
-                                    <label for="envio-check" class="text-xs font-semibold text-slate-700">¿Tenés envío propio? (Si no, usa Flash)</label>
-                                </div>
                             </div>
 
                             <button type="submit" class="w-full h-12 bg-teal-700 hover:bg-teal-800 text-white font-bold rounded-2xl shadow transition text-sm">
@@ -967,37 +1199,12 @@
                             </div>
                         `}
                     </div>
-
-                    <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 space-y-4">
-                        <h2 class="text-lg font-bold text-slate-900">📋 Pedidos Recibidos por WhatsApp (${myOrders.length})</h2>
-                        ${myOrders.length === 0 ? `
-                            <p class="text-slate-500 text-sm text-center py-6">Aún no recibiste pedidos.</p>
-                        ` : `
-                            <div class="space-y-3">
-                                ${myOrders.map(o => `
-                                    <div class="border border-slate-200 rounded-2xl p-4 bg-slate-50 space-y-2 text-xs">
-                                        <div class="flex justify-between items-center font-bold text-slate-800 text-sm">
-                                            <span>📦 ${o.productoNombre || 'Producto'} x${o.cantidad || 1}</span>
-                                            <span class="text-teal-800">$${Number(o.totalCliente || o.subtotal || 0).toLocaleString('es-AR')}</span>
-                                        </div>
-                                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-1 text-slate-600">
-                                            <div><b>Cliente:</b> ${o.cliente || 'Anónimo'}</div>
-                                            <div><b>Dirección:</b> ${o.direccion || 'Tres Arroyos'}</div>
-                                            <div><b>Fecha:</b> ${o.fecha ? new Date(o.fecha).toLocaleString() : 'Reciente'}</div>
-                                            <div><b>Envío Flash:</b> ${(o.flash === true || o.flash === 'true' || o.flash === 'TRUE') ? '<span class="text-amber-700 font-bold">SI (Comisión 10% + $2000)</span>' : 'No (Envío propio)'}</div>
-                                        </div>
-                                        ${o.nota ? `<div class="bg-white p-2 rounded-xl border border-slate-200 text-slate-700"><b>Nota:</b> ${o.nota}</div>` : ''}
-                                    </div>
-                                `).join('')}
-                            </div>
-                        `}
-                    </div>
                 </main>
             `;
         }
 
         // ==========================================
-        // 4. ADMIN PANEL (#admin)
+        // 7. ADMIN PANEL (#admin)
         // ==========================================
         function renderAdminView() {
             isEditing = false;
@@ -1138,7 +1345,7 @@
         }
 
         // ==========================================
-        // 5. MODALS
+        // 8. MODALS (Product details, Login/Register auth)
         // ==========================================
         function renderModals() {
             let modalsHtml = '';
@@ -1276,149 +1483,6 @@
                 }
             }
 
-            if (state.editStoreModalOpen) {
-                isEditing = true;
-                const sessionEmail = state.session ? state.session.email.toLowerCase().trim() : '';
-                const v = state.tiendas.find(u => (u.email && u.email.toLowerCase().trim() === sessionEmail) || (u.dueño && u.dueño.toLowerCase().trim() === sessionEmail)) || {};
-                modalsHtml += `
-                    <div class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-                        <div class="bg-white rounded-3xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 shadow-2xl space-y-4 relative modal-box">
-                            <button onclick="isEditing=false; state.editStoreModalOpen = false; render();" class="absolute top-4 right-4 text-slate-400 hover:text-slate-700 font-bold">✕</button>
-                            <h2 class="text-lg font-extrabold text-slate-900">⚙️ Editar Ficha y Redes</h2>
-                            <form id="edit-store-form" onsubmit="handleSaveStore(event)" class="space-y-3">
-                                <div>
-                                    <label class="text-xs font-semibold text-slate-700">Nombre de Tienda</label>
-                                    <input type="text" name="nombreTienda" value="${v.nombreTienda || ''}" required class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-sm mt-1">
-                                </div>
-                                <div>
-                                    <label class="text-xs font-semibold text-slate-700">Descripción</label>
-                                    <textarea name="descripcion" rows="2" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-sm mt-1">${v.descripcion || ''}</textarea>
-                                </div>
-                                <div class="grid grid-cols-2 gap-3">
-                                    <div>
-                                        <label class="text-xs font-semibold text-slate-700">Dirección</label>
-                                        <input type="text" name="direccion" value="${v.direccion || ''}" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-sm mt-1">
-                                    </div>
-                                    <div>
-                                        <label class="text-xs font-semibold text-slate-700">Zona</label>
-                                        <select name="zona" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-sm mt-1">
-                                            ${ZONES_TRES_ARROYOS.map(z => `<option value="${z}" ${v.zona === z ? 'selected' : ''}>${z}</option>`).join('')}
-                                        </select>
-                                    </div>
-                                </div>
-                                <div class="grid grid-cols-2 gap-3">
-                                    <div>
-                                        <label class="text-xs font-semibold text-slate-700">WhatsApp</label>
-                                        <input type="text" name="wsp" value="${v.wsp || ''}" required class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-sm mt-1">
-                                    </div>
-                                    <div>
-                                        <label class="text-xs font-semibold text-slate-700">Horarios</label>
-                                        <input type="text" name="horario" value="${v.horario || 'Lunes a Sábados 9 a 20hs'}" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-sm mt-1">
-                                    </div>
-                                </div>
-                                <div class="grid grid-cols-2 gap-3">
-                                    <div>
-                                        <label class="text-xs font-semibold text-slate-700">Link Instagram</label>
-                                        <input type="url" name="instagramUrl" placeholder="https://instagram.com/tutienda" value="${v.instagramUrl || ''}" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-sm mt-1">
-                                    </div>
-                                    <div>
-                                        <label class="text-xs font-semibold text-slate-700">Link Facebook</label>
-                                        <input type="url" name="facebookUrl" placeholder="https://facebook.com/tutienda" value="${v.facebookUrl || ''}" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-sm mt-1">
-                                    </div>
-                                </div>
-                                <div>
-                                    <label class="text-xs font-semibold text-slate-700">Link Web Personal</label>
-                                    <input type="url" name="webUrl" placeholder="https://tutienda.com" value="${v.webUrl || ''}" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-sm mt-1">
-                                </div>
-                                <div class="grid grid-cols-2 gap-3">
-                                    <div>
-                                        <label class="text-xs font-semibold text-slate-700">¿Vehículo Propio?</label>
-                                        <select name="vehiculo" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-sm mt-1">
-                                            <option value="Si" ${v.vehiculo === 'Si' ? 'selected' : ''}>Si</option>
-                                            <option value="No" ${v.vehiculo === 'No' ? 'selected' : ''}>No</option>
-                                        </select>
-                                    </div>
-                                </div>
-                                <div>
-                                    <label class="text-xs font-semibold text-slate-700">Foto de Perfil / Logo</label>
-                                    <input type="file" name="fotoPerfil" accept="image/*" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-3 py-2 text-xs">
-                                </div>
-                                <div>
-                                    <label class="text-xs font-semibold text-slate-700">Fotos Carrusel del Local (Hasta 6)</label>
-                                    <input type="file" name="fotosCarrusel" accept="image/*" multiple class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-3 py-2 text-xs">
-                                </div>
-                                <button type="submit" class="w-full h-12 bg-teal-700 hover:bg-teal-800 text-white font-bold rounded-2xl shadow transition text-sm">Guardar Cambios de Tienda</button>
-                            </form>
-                        </div>
-                    </div>
-                `;
-            }
-
-            if (state.editCatalogModalOpen) {
-                isEditing = true;
-                const sessionEmail = state.session ? state.session.email.toLowerCase().trim() : '';
-                const v = state.tiendas.find(u => (u.email && u.email.toLowerCase().trim() === sessionEmail) || (u.dueño && u.dueño.toLowerCase().trim() === sessionEmail)) || {};
-                let cat = { titulo: 'Catálogo Verano', desc: 'Envíos en el día', bienvenida: '¡Bienvenidos!', color: '#0f766e', destacadosIds: [], mostrarInfo: 'Si' };
-                try {
-                    if (v.catalogo) {
-                        cat = typeof v.catalogo === 'string' ? JSON.parse(v.catalogo) : v.catalogo;
-                    }
-                } catch(e) {}
-                const myProducts = state.productos.filter(p => (p.vendorEmail && p.vendorEmail === v.email) || (p.tiendaSlug && p.tiendaSlug === v.slug));
-
-                modalsHtml += `
-                    <div class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-                        <div class="bg-white rounded-3xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 shadow-2xl space-y-4 relative modal-box">
-                            <button onclick="isEditing=false; state.editCatalogModalOpen = false; render();" class="absolute top-4 right-4 text-slate-400 hover:text-slate-700 font-bold">✕</button>
-                            <h2 class="text-lg font-extrabold text-slate-900">🎨 Configurar Catálogo y Destacados</h2>
-                            <form onsubmit="handleSaveCatalog(event)" class="space-y-3">
-                                <div>
-                                    <label class="text-xs font-semibold text-slate-700">Título del Catálogo</label>
-                                    <input type="text" name="titulo" value="${cat.titulo || ''}" required class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-sm mt-1">
-                                </div>
-                                <div>
-                                    <label class="text-xs font-semibold text-slate-700">Descripción Corta</label>
-                                    <textarea name="desc" rows="2" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-sm mt-1">${cat.desc || ''}</textarea>
-                                </div>
-                                <div>
-                                    <label class="text-xs font-semibold text-slate-700">Mensaje de Bienvenida para Clientes</label>
-                                    <input type="text" name="bienvenida" value="${cat.bienvenida || ''}" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-sm mt-1">
-                                </div>
-                                <div class="grid grid-cols-2 gap-3">
-                                    <div>
-                                        <label class="text-xs font-semibold text-slate-700">Color de Acento</label>
-                                        <select name="color" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-sm mt-1">
-                                            <option value="#0f766e" ${cat.color === '#0f766e' ? 'selected' : ''}>Verde Petróleo (#0f766e)</option>
-                                            <option value="#0f172a" ${cat.color === '#0f172a' ? 'selected' : ''}>Azul Oscuro (#0f172a)</option>
-                                            <option value="#be185d" ${cat.color === '#be185d' ? 'selected' : ''}>Rosa Fucsia (#be185d)</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label class="text-xs font-semibold text-slate-700">Mostrar Dirección e Info</label>
-                                        <select name="mostrarInfo" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-sm mt-1">
-                                            <option value="Si" ${cat.mostrarInfo === 'Si' ? 'selected' : ''}>Si</option>
-                                            <option value="No" ${cat.mostrarInfo === 'No' ? 'selected' : ''}>No</option>
-                                        </select>
-                                    </div>
-                                </div>
-                                <div>
-                                    <label class="text-xs font-semibold text-slate-700 mb-1 block">Seleccioná hasta 3 Productos Destacados</label>
-                                    <div class="space-y-1.5 max-h-40 overflow-y-auto bg-slate-50 p-3 rounded-2xl border border-slate-200">
-                                        ${myProducts.map(p => `
-                                            <label class="flex items-center gap-2 text-xs text-slate-700 cursor-pointer">
-                                                <input type="checkbox" name="destacado" value="${p.id}" ${cat.destacadosIds && cat.destacadosIds.includes(p.id) ? 'checked' : ''} class="w-4 h-4 text-teal-700 rounded">
-                                                <span>${p.nombre} ($${p.precio})</span>
-                                            </label>
-                                        `).join('')}
-                                    </div>
-                                </div>
-                                <button type="submit" class="w-full h-12 bg-teal-700 hover:bg-teal-800 text-white font-bold rounded-2xl shadow transition text-sm">Guardar Catálogo</button>
-                            </form>
-                        </div>
-                    </div>
-                `;
-            }
-
             if (state.editProductModal) {
                 isEditing = true;
                 const p = state.productos.find(prod => prod.id === state.editProductModal);
@@ -1465,7 +1529,7 @@
         }
 
         // ==========================================
-        // 6. CONTROLLERS & AUTHENTICATION FLOW
+        // 9. CONTROLLERS & AUTHENTICATION
         // ==========================================
         function openAuthModal(tab = 'login') {
             state.authModalOpen = true;
@@ -1508,7 +1572,7 @@
                 showToast("Cuenta creada ✓");
 
                 setTimeout(() => {
-                    window.location.hash = '#mi-tienda';
+                    window.location.hash = '#crear-tienda';
                     render();
                 }, 500);
 
@@ -1602,7 +1666,7 @@
                 showToast("Tienda guardada ✓");
                 
                 setTimeout(() => {
-                    window.location.hash = '#t/' + slug;
+                    window.location.hash = '#mi-tienda';
                     fetchAllFromSheets(false);
                 }, 1000);
             } catch (err) {
@@ -1634,8 +1698,8 @@
                     precio: Number(fd.get('precio')),
                     categoria: fd.get('categoria'),
                     descripcion: fd.get('descripcion'),
-                    stock: fd.get('stock') === 'Si' ? 'true' : 'false',
-                    envioPropio: fd.get('envioPropio') === 'Si' ? 'true' : 'false',
+                    stock: 'true',
+                    envioPropio: 'false',
                     fotos: JSON.stringify(fotosArr),
                     activo: 'true'
                 };
@@ -1713,12 +1777,6 @@
             }
         }
 
-        function openEditStoreModal() {
-            isEditing = true;
-            state.editStoreModalOpen = true;
-            render();
-        }
-
         async function handleSaveStore(e) {
             e.preventDefault();
             isEditing = true;
@@ -1750,55 +1808,17 @@
                     v.fotosCarrusel = JSON.stringify(car);
                 }
 
-                state.editStoreModalOpen = false;
                 isEditing = false;
                 postToSheets('actualizar_tienda', v);
-                showToast("Guardado, actualizando...");
-                setTimeout(() => fetchAllFromSheets(false), 2000);
+                showToast("Tienda guardada ✓");
+                setTimeout(() => {
+                    window.location.hash = '#mi-tienda';
+                    fetchAllFromSheets(false);
+                }, 1000);
             } catch (err) {
                 console.error("Error in handleSaveStore:", err);
                 isEditing = false;
                 showToast("Error al guardar tienda", "error");
-            }
-        }
-
-        function openEditCatalogModal() {
-            isEditing = true;
-            state.editCatalogModalOpen = true;
-            render();
-        }
-
-        async function handleSaveCatalog(e) {
-            e.preventDefault();
-            isEditing = true;
-            try {
-                const fd = new FormData(e.target);
-                const sessionEmail = state.session ? state.session.email.toLowerCase().trim() : '';
-                const v = state.tiendas.find(u => (u.email && u.email.toLowerCase().trim() === sessionEmail) || (u.dueño && u.dueño.toLowerCase().trim() === sessionEmail));
-                if (!v) return;
-
-                const destacadosIds = Array.from(e.target.querySelectorAll('input[name="destacado"]:checked')).map(cb => cb.value);
-
-                let catObj = {
-                    titulo: fd.get('titulo'),
-                    desc: fd.get('desc'),
-                    bienvenida: fd.get('bienvenida'),
-                    color: fd.get('color'),
-                    mostrarInfo: fd.get('mostrarInfo'),
-                    destacadosIds
-                };
-
-                v.catalogo = JSON.stringify(catObj);
-
-                state.editCatalogModalOpen = false;
-                isEditing = false;
-                postToSheets('actualizar_tienda', v);
-                showToast("Guardado, actualizando...");
-                setTimeout(() => fetchAllFromSheets(false), 2000);
-            } catch (err) {
-                console.error("Error in handleSaveCatalog:", err);
-                isEditing = false;
-                showToast("Error al guardar catálogo", "error");
             }
         }
 
