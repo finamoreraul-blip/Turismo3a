@@ -39,7 +39,6 @@
             max-width: 400px;
             margin: auto;
         }
-        /* Custom scrollbar for horizontal pills */
         .no-scrollbar::-webkit-scrollbar {
             display: none;
         }
@@ -68,33 +67,39 @@
     <script>
         // CONFIG & URL
         const SHEET_URL = "https://script.google.com/macros/s/AKfycbz6sUbdfJ23AOKNC0hwfGMWTeZ-9Ck4LpgeT4aEGmwm5SA3GVqtj-PGFBjx7PQh7ONWuA/exec";
-        const CENTRAL_WSP = "5492983389710"; // Número central para pedidos Flash
+        const CENTRAL_WSP = "5492983389710";
 
-        // APP STATE (LocalStorage first)
+        // APP STATE (LocalStorage first with safe fallbacks)
         let state = {
-            users: JSON.parse(localStorage.getItem('ta_users')) || [],
-            products: JSON.parse(localStorage.getItem('ta_products')) || [],
-            orders: JSON.parse(localStorage.getItem('ta_orders')) || [],
-            session: JSON.parse(localStorage.getItem('ta_session')) || null,
-            pendingSync: JSON.parse(localStorage.getItem('ta_pending_sync')) || [],
+            users: JSON.parse(localStorage.getItem('ta_users') || '[]'),
+            products: JSON.parse(localStorage.getItem('ta_products') || '[]'),
+            orders: JSON.parse(localStorage.getItem('ta_orders') || '[]'),
+            session: JSON.parse(localStorage.getItem('ta_session') || 'null'),
+            pendingSync: JSON.parse(localStorage.getItem('ta_pending_sync') || '[]'),
             isOnline: true,
             activeCategory: 'Todos',
             searchQuery: '',
-            authTab: 'login', // 'login' or 'register'
+            authTab: 'login',
+            authModalOpen: false,
             selectedProductModal: null,
-            selectedStoreModal: null,
-            checkoutData: { cant: 1, cliente: '', direccion: '', nota: '', flash: false },
+            editStoreModalOpen: false,
+            editCatalogModalOpen: false,
             editProductModal: null,
+            checkoutData: { cant: 1, cliente: '', direccion: '', nota: '', flash: false },
             adminAuthed: sessionStorage.getItem('ta_admin_auth') === 'true'
         };
 
         const CATEGORIES = ['Todos', 'Alimentos', 'Servicios', 'Indumentaria', 'Hogar y Deco', 'Belleza', 'Oficios', 'Tecnología', 'Vehículos'];
         const ZONES_TRES_ARROYOS = ['Centro', 'Barrio Norte', 'Barrio Sur', 'Villa Italia', 'Villa Primavera', 'Quintas', 'Planta Urbana General'];
 
-        // --- COMPRESSION UTILS ---
-        async function compressImage(file, maxWidth = 800, quality = 0.7) {
+        // --- ROBUST IMAGE COMPRESSION (Max 800px, JPEG quality 0.6) ---
+        async function compressImage(file, maxWidth = 800, quality = 0.6) {
             return new Promise((resolve) => {
-                if (!file || typeof file === 'string') {
+                if (!file) {
+                    resolve('');
+                    return;
+                }
+                if (typeof file === 'string') {
                     resolve(file);
                     return;
                 }
@@ -115,27 +120,48 @@
                         canvas.height = height;
                         const ctx = canvas.getContext('2d');
                         ctx.drawImage(img, 0, 0, width, height);
-                        resolve(canvas.toDataURL('image/jpeg', quality));
+                        let result = canvas.toDataURL('image/jpeg', quality);
+                        resolve(result);
                     };
                     img.onerror = () => resolve(event.target.result);
                 };
-                reader.onerror = () => resolve(null);
+                reader.onerror = () => resolve('');
             });
         }
 
-        async function compressMultiple(fileList, maxCount = 4) {
-            let files = Array.from(fileList).slice(0, maxCount);
-            let promises = files.map(f => compressImage(f, 800, 0.7));
-            return await Promise.all(promises);
+        async function compressMultiple(fileList, maxCount = 4, quality = 0.6) {
+            try {
+                let files = Array.from(fileList).slice(0, maxCount);
+                let promises = files.map(f => compressImage(f, 800, quality));
+                let results = await Promise.all(promises);
+                let filtered = results.filter(r => r && r.length > 0);
+                
+                // Check total payload size approx, if > 4MB downscale quality to 0.5
+                let totalStr = JSON.stringify(filtered);
+                if (totalStr.length > 4 * 1024 * 1024) {
+                    showToast("Fotos muy pesadas, optimizando compresión...", "error");
+                    let lowPromises = files.map(f => compressImage(f, 600, 0.4));
+                    filtered = await Promise.all(lowPromises);
+                }
+                return filtered;
+            } catch (err) {
+                console.error("Error compressing images:", err);
+                return [];
+            }
         }
 
-        // --- SYNC & LOCALSTORAGE ---
+        // --- LOCAL STORAGE & SYNC ---
         function saveLocal() {
-            localStorage.setItem('ta_users', JSON.stringify(state.users));
-            localStorage.setItem('ta_products', JSON.stringify(state.products));
-            localStorage.setItem('ta_orders', JSON.stringify(state.orders));
-            localStorage.setItem('ta_session', JSON.stringify(state.session));
-            localStorage.setItem('ta_pending_sync', JSON.stringify(state.pendingSync));
+            try {
+                localStorage.setItem('ta_users', JSON.stringify(state.users));
+                localStorage.setItem('ta_products', JSON.stringify(state.products));
+                localStorage.setItem('ta_orders', JSON.stringify(state.orders));
+                localStorage.setItem('ta_session', JSON.stringify(state.session));
+                localStorage.setItem('ta_pending_sync', JSON.stringify(state.pendingSync));
+            } catch (e) {
+                console.error("Storage error:", e);
+                showToast("Error de almacenamiento local (memoria llena)", "error");
+            }
         }
 
         async function syncWithSheets(action, payload = {}) {
@@ -150,6 +176,7 @@
                 state.isOnline = true;
                 updateSyncBar(true);
             } catch (err) {
+                console.error("Sync error:", err);
                 state.isOnline = false;
                 updateSyncBar(false);
                 state.pendingSync.push({ action, payload, time: Date.now() });
@@ -198,14 +225,12 @@
             }
         }
 
-        // --- CAROUSEL AUTO-PLAY TIMERS ---
+        // --- CAROUSEL AUTO-PLAY ---
         let carouselIntervals = {};
         function startCarousels() {
-            // Clear existing
             Object.values(carouselIntervals).forEach(clearInterval);
             carouselIntervals = {};
 
-            // Find all carousels on page
             document.querySelectorAll('.carousel-container').forEach(container => {
                 const id = container.dataset.carouselId;
                 const slides = container.querySelectorAll('.carousel-slide');
@@ -230,20 +255,10 @@
                     currentIndex = (currentIndex + 1) % slides.length;
                     showSlide(currentIndex);
                 }, 3000);
-
-                // Expose next/prev globally
-                window[`carousel_${id}_next`] = () => {
-                    currentIndex = (currentIndex + 1) % slides.length;
-                    showSlide(currentIndex);
-                };
-                window[`carousel_${id}_prev`] = () => {
-                    currentIndex = (currentIndex - 1 + slides.length) % slides.length;
-                    showSlide(currentIndex);
-                };
             });
         }
 
-        // --- TOAST NOTIFICATION ---
+        // --- TOAST NOTIFICATIONS ---
         function showToast(msg, type = 'success') {
             const container = document.getElementById('toast-container');
             if(!container) return;
@@ -258,7 +273,7 @@
             }, 3000);
         }
 
-        // --- ROUTER / HASH ROUTING ---
+        // --- ROUTING ---
         function handleRoute() {
             const hash = window.location.hash;
             if (hash.startsWith('#admin') || window.location.pathname.includes('admin') || window.location.search.includes('admin')) {
@@ -297,15 +312,13 @@
                 html = renderGeneralCatalogView();
             }
 
-            // Append Modals
             html += renderModals();
-
             app.innerHTML = html;
             startCarousels();
         }
 
         // ==========================================
-        // 1. GENERAL CATALOG & HOME VIEW
+        // 1. GENERAL CATALOG & HEADER SESSION
         // ==========================================
         function renderGeneralCatalogView() {
             const activeUser = state.session ? state.users.find(u => u.email === state.session.email) : null;
@@ -322,7 +335,6 @@
             }
 
             return `
-                <!-- HEADER -->
                 <header class="bg-white shadow-sm sticky top-0 z-40">
                     <div class="max-w-6xl mx-auto px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3">
                         <div class="flex items-center justify-between w-full sm:w-auto">
@@ -331,13 +343,12 @@
                             </a>
                             <div class="flex sm:hidden gap-2">
                                 ${state.session ? 
-                                    `<a href="#mi-tienda" class="bg-teal-700 text-white text-xs px-3 py-2 rounded-xl font-medium">Mi Tienda</a>` :
-                                    `<button onclick="openAuthModal('register')" class="bg-teal-700 text-white text-xs px-3 py-2 rounded-xl font-medium">¿Querés vender?</button>`
+                                    `<a href="#mi-tienda" class="bg-teal-700 text-white text-xs px-3 py-2 rounded-xl font-medium">Mi Panel</a>` :
+                                    `<button onclick="console.log('Click abrir auth modal'); openAuthModal('register');" class="bg-teal-700 text-white text-xs px-3 py-2 rounded-xl font-medium">Crear tienda</button>`
                                 }
                             </div>
                         </div>
 
-                        <!-- Search Bar -->
                         <div class="w-full sm:w-96 relative">
                             <input type="text" placeholder="Buscá productos, comidas, servicios..." value="${state.searchQuery}" oninput="state.searchQuery = this.value; render();"
                                 class="w-full bg-slate-100 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-teal-700">
@@ -345,13 +356,12 @@
 
                         <div class="hidden sm:flex items-center gap-3">
                             ${state.session ? 
-                                `<a href="#mi-tienda" class="bg-teal-700 text-white text-sm px-4 py-2.5 rounded-xl font-medium hover:bg-teal-800 transition">Mi Tienda</a>` :
-                                `<button onclick="openAuthModal('register')" class="bg-teal-700 text-white text-sm px-4 py-2.5 rounded-xl font-medium hover:bg-teal-800 transition">¿Querés vender?</button>`
+                                `<a href="#mi-tienda" class="bg-teal-700 text-white text-sm px-4 py-2.5 rounded-xl font-medium hover:bg-teal-800 transition">Mi Panel</a>` :
+                                `<button onclick="console.log('Click abrir auth modal desktop'); openAuthModal('register');" class="bg-teal-700 text-white text-sm px-4 py-2.5 rounded-xl font-medium hover:bg-teal-800 transition">Crear tienda / Login</button>`
                             }
                         </div>
                     </div>
 
-                    <!-- Categories Pills -->
                     <div class="max-w-6xl mx-auto px-4 py-2 overflow-x-auto no-scrollbar flex gap-2 border-t border-slate-100">
                         ${CATEGORIES.map(cat => `
                             <button onclick="state.activeCategory = '${cat}'; render();" 
@@ -362,7 +372,6 @@
                     </div>
                 </header>
 
-                <!-- HERO BANNER / WELCOME -->
                 <section class="max-w-6xl mx-auto px-4 py-6 w-full">
                     <div class="bg-gradient-to-r from-teal-800 to-teal-900 rounded-3xl p-6 md:p-10 text-white shadow-md flex flex-col md:flex-row items-center justify-between gap-6">
                         <div class="space-y-3 text-center md:text-left">
@@ -377,7 +386,6 @@
                     </div>
                 </section>
 
-                <!-- PRODUCTS GRID -->
                 <main class="max-w-6xl mx-auto px-4 py-4 flex-1 w-full">
                     <div class="flex justify-between items-center mb-4">
                         <h2 class="text-lg font-bold text-slate-800">Catálogo General (${filteredProducts.length})</h2>
@@ -397,7 +405,6 @@
                                 const cId = 'prod_card_' + p.id;
                                 return `
                                     <div onclick="openProductModal('${p.id}')" class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col cursor-pointer hover:shadow-md transition">
-                                        <!-- Card Carousel / Image -->
                                         <div class="relative h-40 bg-slate-100 carousel-container overflow-hidden" data-carousel-id="${cId}">
                                             ${fotos.map((f, i) => `
                                                 <div class="carousel-slide w-full h-full" style="display: ${i===0?'block':'none'}">
@@ -429,7 +436,6 @@
                     `}
                 </main>
 
-                <!-- FOOTER -->
                 <footer class="bg-white border-t border-slate-200 mt-12 py-8 text-center text-sm text-slate-500">
                     <p class="font-semibold text-teal-800">Tres Arroyos Market 🛒</p>
                     <p class="mt-1">El punto de encuentro digital para el comercio local de Tres Arroyos.</p>
@@ -465,7 +471,6 @@
             const restoProds = prods.filter(p => !destacadosIds.includes(p.id));
 
             return `
-                <!-- HEADER PUBLIC STORE -->
                 <header class="bg-white shadow-sm sticky top-0 z-40">
                     <div class="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
                         <a href="#" class="text-teal-800 text-sm font-bold flex items-center gap-1">← Volver al Market</a>
@@ -475,7 +480,6 @@
                 </header>
 
                 <main class="max-w-4xl mx-auto px-4 py-4 flex-1 w-full space-y-6">
-                    <!-- STORE BANNER CAROUSEL -->
                     <div class="relative h-48 sm:h-64 rounded-3xl overflow-hidden bg-slate-200 shadow-sm carousel-container" data-carousel-id="store_banner">
                         ${bannerFotos.map((f, i) => `
                             <div class="carousel-slide w-full h-full" style="display: ${i===0?'block':'none'}">
@@ -489,7 +493,6 @@
                         ` : ''}
                         <div class="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent"></div>
                         
-                        <!-- Profile Avatar Overlap -->
                         <div class="absolute bottom-4 left-4 flex items-center gap-4 z-20">
                             <img src="${vendor.fotoPerfil || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200'}" class="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl object-cover border-2 border-white shadow-lg bg-white">
                             <div class="text-white drop-shadow">
@@ -499,7 +502,6 @@
                         </div>
                     </div>
 
-                    <!-- STORE INFO & WELCOME -->
                     <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 space-y-4">
                         <div class="bg-teal-50 border border-teal-100 rounded-2xl p-4 text-teal-900 text-sm">
                             <p class="font-bold mb-1">👋 ${catalogoConfig.bienvenida}</p>
@@ -516,13 +518,11 @@
                         ` : ''}
                     </div>
 
-                    <!-- CATALOG TITLE SECTION -->
                     <div>
                         <h2 class="text-xl font-extrabold text-slate-900">${catalogoConfig.titulo}</h2>
                         <p class="text-xs text-slate-500">${catalogoConfig.desc}</p>
                     </div>
 
-                    <!-- FEATURED PRODUCTS -->
                     ${destacadosProds.length > 0 ? `
                         <div class="space-y-3">
                             <h3 class="text-sm font-bold text-teal-800 uppercase tracking-wider">⭐ Destacados</h3>
@@ -532,7 +532,6 @@
                         </div>
                     ` : ''}
 
-                    <!-- REST OF CATALOG -->
                     <div class="space-y-3">
                         <h3 class="text-sm font-bold text-slate-800 uppercase tracking-wider">📦 Todos los Productos (${prods.length})</h3>
                         ${prods.length === 0 ? `
@@ -547,7 +546,6 @@
                     </div>
                 </main>
 
-                <!-- FOOTER -->
                 <footer class="bg-white border-t border-slate-200 mt-12 py-6 text-center text-xs text-slate-500">
                     <p>Tres Arroyos Market • Tienda de <b class="text-slate-700">${vendor.nombreTienda}</b></p>
                 </footer>
@@ -586,9 +584,8 @@
             `;
         }
 
-
         // ==========================================
-        // 3. VENDOR DASHBOARD (#mi-tienda)
+        // 3. VENDOR PANEL (#mi-tienda)
         // ==========================================
         function renderMiTiendaView() {
             if (!state.session) {
@@ -598,8 +595,8 @@
                         <h2 class="text-xl font-bold text-slate-800">Panel del Vendedor</h2>
                         <p class="text-slate-500 text-sm">Iniciá sesión o registrate para administrar tu tienda, productos y pedidos.</p>
                         <div class="flex gap-3 justify-center pt-2">
-                            <button onclick="openAuthModal('login')" class="bg-teal-700 text-white font-medium px-5 py-3 rounded-2xl">Iniciar Sesión</button>
-                            <button onclick="openAuthModal('register')" class="bg-slate-200 text-slate-800 font-medium px-5 py-3 rounded-2xl">Registrarse</button>
+                            <button onclick="console.log('Login modal click'); openAuthModal('login');" class="bg-teal-700 text-white font-medium px-5 py-3 rounded-2xl">Iniciar Sesión</button>
+                            <button onclick="console.log('Register modal click'); openAuthModal('register');" class="bg-slate-200 text-slate-800 font-medium px-5 py-3 rounded-2xl">Registrarse</button>
                         </div>
                         <div class="pt-6">
                             <a href="#" class="text-sm text-teal-700 underline font-medium">← Volver al Catálogo General</a>
@@ -620,18 +617,16 @@
             const publicLink = `${window.location.origin}${window.location.pathname}#t/${vendor.slug}`;
 
             return `
-                <!-- HEADER PANEL -->
                 <header class="bg-white shadow-sm sticky top-0 z-40">
                     <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
                         <a href="#" class="text-teal-800 text-sm font-bold">← Ir al Market</a>
                         <div class="flex items-center gap-2">
-                            <button onclick="logout()" class="bg-rose-50 text-rose-700 text-xs px-3 py-2 rounded-xl font-bold">Cerrar Sesión</button>
+                            <button onclick="console.log('Cerrar sesion click'); logout();" class="bg-rose-50 text-rose-700 text-xs px-3 py-2 rounded-xl font-bold">Cerrar Sesión</button>
                         </div>
                     </div>
                 </header>
 
                 <main class="max-w-5xl mx-auto px-4 py-6 flex-1 w-full space-y-6">
-                    <!-- A) HEADER PANEL INFO -->
                     <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 space-y-4">
                         <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                             <div>
@@ -640,23 +635,21 @@
                                 <p class="text-xs text-slate-500 mt-0.5">Link público: <a href="#t/${vendor.slug}" class="text-teal-700 underline font-medium">tresarroyosmarket.com.ar/#t/${vendor.slug}</a></p>
                             </div>
                             <div class="flex flex-wrap gap-2 w-full md:w-auto">
-                                <button onclick="navigator.clipboard.writeText('${publicLink}'); showToast('¡Link copiado al portapapeles!');" class="bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs px-4 py-3 rounded-2xl font-semibold transition flex-1 md:flex-initial">📋 Copiar Link</button>
+                                <button onclick="console.log('Copiar link click'); navigator.clipboard.writeText('${publicLink}'); showToast('¡Link copiado al portapapeles!');" class="bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs px-4 py-3 rounded-2xl font-semibold transition flex-1 md:flex-initial">📋 Copiar Link</button>
                                 <a href="#t/${vendor.slug}" class="bg-teal-700 hover:bg-teal-800 text-white text-xs px-4 py-3 rounded-2xl font-semibold transition text-center flex-1 md:flex-initial">👁️ Ver mi Tienda</a>
                             </div>
                         </div>
 
-                        <!-- MANAGEMENT ACTION BUTTONS -->
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-100">
-                            <button onclick="openEditStoreModal()" class="bg-slate-900 text-white font-semibold py-3 px-4 rounded-2xl text-sm flex items-center justify-center gap-2 hover:bg-slate-800 transition">
+                            <button onclick="console.log('Abrir editar tienda click'); openEditStoreModal();" class="bg-slate-900 text-white font-semibold py-3 px-4 rounded-2xl text-sm flex items-center justify-center gap-2 hover:bg-slate-800 transition">
                                 ⚙️ Editar Mi Tienda y Fotos Local
                             </button>
-                            <button onclick="openEditCatalogModal()" class="bg-teal-800 text-white font-semibold py-3 px-4 rounded-2xl text-sm flex items-center justify-center gap-2 hover:bg-teal-900 transition">
+                            <button onclick="console.log('Abrir editar catalogo click'); openEditCatalogModal();" class="bg-teal-800 text-white font-semibold py-3 px-4 rounded-2xl text-sm flex items-center justify-center gap-2 hover:bg-teal-900 transition">
                                 🎨 Editar Mi Catálogo (Banner, Título y Destacados)
                             </button>
                         </div>
                     </div>
 
-                    <!-- B) STATS CARDS -->
                     <div class="grid grid-cols-3 gap-3">
                         <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm text-center">
                             <span class="text-2xl font-extrabold text-teal-800 block">${myProducts.length}</span>
@@ -672,10 +665,9 @@
                         </div>
                     </div>
 
-                    <!-- C) AGREGAR PRODUCTO FORM -->
                     <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200">
                         <h2 class="text-lg font-bold text-slate-900 mb-4">➕ Agregar Nuevo Producto</h2>
-                        <form onsubmit="handleCreateProduct(event)" class="space-y-4">
+                        <form id="create-product-form" onsubmit="handleCreateProduct(event)" class="space-y-4">
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div class="space-y-1">
                                     <label class="text-xs font-semibold text-slate-700">Nombre del Producto</label>
@@ -722,7 +714,6 @@
                         </form>
                     </div>
 
-                    <!-- D) LISTA DE PRODUCTOS -->
                     <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 space-y-4">
                         <h2 class="text-lg font-bold text-slate-900">📦 Mis Productos (${myProducts.length})</h2>
                         ${myProducts.length === 0 ? `
@@ -750,7 +741,6 @@
                         `}
                     </div>
 
-                    <!-- E) PEDIDOS RECIBIDOS -->
                     <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 space-y-4">
                         <h2 class="text-lg font-bold text-slate-900">📋 Pedidos Recibidos por WhatsApp (${myOrders.length})</h2>
                         ${myOrders.length === 0 ? `
@@ -779,9 +769,8 @@
             `;
         }
 
-
         // ==========================================
-        // 4. ADMIN VIEW (#admin)
+        // 4. ADMIN PANEL (#admin)
         // ==========================================
         function renderAdminView() {
             if (!state.adminAuthed) {
@@ -812,7 +801,6 @@
             const totalProductos = state.products.length;
             const totalPedidos = state.orders.length;
             
-            // Financial metrics
             let totalComisiones10 = 0;
             let totalEnvios2000 = 0;
             state.orders.forEach(o => {
@@ -838,7 +826,6 @@
                 </header>
 
                 <main class="max-w-6xl mx-auto px-4 py-6 flex-1 w-full space-y-6">
-                    <!-- TOP FINANCIAL CARDS -->
                     <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
                             <span class="text-xs text-slate-500 font-semibold uppercase">Tiendas Registradas</span>
@@ -858,7 +845,6 @@
                         </div>
                     </div>
 
-                    <!-- REVENUE SUMMARY BANNER -->
                     <div class="bg-gradient-to-r from-teal-900 to-slate-900 text-white rounded-3xl p-6 shadow-sm flex flex-col sm:flex-row justify-between items-center gap-4">
                         <div>
                             <span class="text-xs text-teal-300 font-semibold uppercase">Balance Central Acumulado</span>
@@ -868,7 +854,6 @@
                         <a href="#" class="bg-white text-slate-900 font-bold px-6 py-3 rounded-2xl text-sm shadow hover:bg-slate-100 transition">Ver Market Público</a>
                     </div>
 
-                    <!-- ORDERS TABLE / LIST -->
                     <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 space-y-4">
                         <h3 class="text-lg font-bold text-slate-900">📋 Todos los Pedidos Registrados (${totalPedidos})</h3>
                         ${totalPedidos === 0 ? `
@@ -924,14 +909,12 @@
             }
         }
 
-
         // ==========================================
-        // 5. MODALS RENDER (Auth, Product Detail, Edit Store, Edit Catalog, Edit Product)
+        // 5. MODALS
         // ==========================================
         function renderModals() {
             let modalsHtml = '';
 
-            // AUTH MODAL
             if (state.authModalOpen) {
                 modalsHtml += `
                     <div class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
@@ -969,7 +952,7 @@
                                         <input type="email" name="email" required placeholder="tu@email.com" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm mt-1 focus:outline-none focus:border-teal-700">
                                     </div>
                                     <div>
-                                        <label class="text-xs font-semibold text-slate-700">WhatsApp (Formato 2983XXXXXX sin 0 ni 15)</label>
+                                        <label class="text-xs font-semibold text-slate-700">WhatsApp (Formato 2983XXXXXX)</label>
                                         <input type="text" name="wsp" required placeholder="2983445566" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm mt-1 focus:outline-none focus:border-teal-700">
                                     </div>
                                     <div>
@@ -997,7 +980,6 @@
                 `;
             }
 
-            // PRODUCT DETAIL MODAL
             if (state.selectedProductModal) {
                 const p = state.products.find(prod => prod.id === state.selectedProductModal);
                 if (p) {
@@ -1013,7 +995,6 @@
                             <div class="bg-white rounded-3xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 shadow-2xl space-y-4 relative modal-box">
                                 <button onclick="state.selectedProductModal = null; render();" class="absolute top-4 right-4 bg-slate-100 w-8 h-8 rounded-full flex items-center justify-center text-slate-600 font-bold z-20">✕</button>
 
-                                <!-- Carousel Fotos -->
                                 <div class="relative h-56 rounded-2xl overflow-hidden bg-slate-100 carousel-container" data-carousel-id="${cId}">
                                     ${fotos.map((f, i) => `
                                         <div class="carousel-slide w-full h-full" style="display: ${i===0?'block':'none'}">
@@ -1035,7 +1016,6 @@
                                     <p class="text-xs text-slate-600 mt-2">${p.descripcion || 'Sin descripción adicional.'}</p>
                                 </div>
 
-                                <!-- CHECKOUT FORM -->
                                 <div class="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
                                     <h3 class="text-xs font-bold uppercase text-slate-700">🛍️ Realizar Pedido por WhatsApp</h3>
                                     <div class="grid grid-cols-2 gap-3">
@@ -1057,15 +1037,13 @@
                                         <input type="text" value="${state.checkoutData.nota}" oninput="state.checkoutData.nota = this.value" placeholder="Ej: Timbre no anda" class="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm mt-1 focus:outline-none">
                                     </div>
 
-                                    <!-- FLASH CHECKBOX -->
                                     <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-start gap-2">
                                         <input type="checkbox" ${state.checkoutData.flash ? 'checked' : ''} onchange="state.checkoutData.flash = this.checked; render();" id="flash-modal-check" class="mt-0.5 w-4 h-4 text-amber-700 rounded border-amber-300">
                                         <label for="flash-modal-check" class="text-[11px] text-amber-900 leading-snug cursor-pointer">
-                                            <b>¿El vendedor no tiene envío? Usá servicio FLASH:</b> Retiramos en tu local y entregamos en el día. 10% + $2.000 envío cliente.
+                                            <b>FLASH:</b> Retiramos en tu local y entregamos en el día. 10% + $2.000 envío cliente.
                                         </label>
                                     </div>
 
-                                    <!-- TOTAL -->
                                     <div class="pt-2 border-t border-slate-200 flex justify-between items-center text-sm font-bold">
                                         <span>Total a pagar:</span>
                                         <span class="text-lg text-teal-800">$${totalCliente.toLocaleString('es-AR')}</span>
@@ -1081,7 +1059,6 @@
                 }
             }
 
-            // EDIT STORE MODAL
             if (state.editStoreModalOpen) {
                 const v = state.users.find(u => u.email === state.session.email);
                 modalsHtml += `
@@ -1089,7 +1066,7 @@
                         <div class="bg-white rounded-3xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 shadow-2xl space-y-4 relative modal-box">
                             <button onclick="state.editStoreModalOpen = false; render();" class="absolute top-4 right-4 text-slate-400 hover:text-slate-700 font-bold">✕</button>
                             <h2 class="text-lg font-extrabold text-slate-900">⚙️ Editar Ficha de Tienda</h2>
-                            <form onsubmit="handleSaveStore(event)" class="space-y-3">
+                            <form id="edit-store-form" onsubmit="handleSaveStore(event)" class="space-y-3">
                                 <div>
                                     <label class="text-xs font-semibold text-slate-700">Nombre de Tienda</label>
                                     <input type="text" name="nombreTienda" value="${v.nombreTienda || ''}" required class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-sm mt-1">
@@ -1134,11 +1111,11 @@
                                     </div>
                                 </div>
                                 <div>
-                                    <label class="text-xs font-semibold text-slate-700">Foto de Perfil / Logo (1)</label>
+                                    <label class="text-xs font-semibold text-slate-700">Foto de Perfil / Logo</label>
                                     <input type="file" name="fotoPerfil" accept="image/*" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-3 py-2 text-xs">
                                 </div>
                                 <div>
-                                    <label class="text-xs font-semibold text-slate-700">Fotos Carrusel del Local (Hasta 6 para portada)</label>
+                                    <label class="text-xs font-semibold text-slate-700">Fotos Carrusel del Local (Hasta 6)</label>
                                     <input type="file" name="fotosCarrusel" accept="image/*" multiple class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-3 py-2 text-xs">
                                 </div>
                                 <button type="submit" class="w-full h-12 bg-teal-700 hover:bg-teal-800 text-white font-bold rounded-2xl shadow transition text-sm">Guardar Cambios de Tienda</button>
@@ -1148,7 +1125,6 @@
                 `;
             }
 
-            // EDIT CATALOG MODAL
             if (state.editCatalogModalOpen) {
                 const v = state.users.find(u => u.email === state.session.email);
                 const cat = v.catalogo || { titulo: 'Catálogo Verano', desc: 'Envíos en el día', bienvenida: '¡Bienvenidos!', color: '#0f766e', destacadosIds: [], mostrarInfo: 'Si' };
@@ -1207,7 +1183,6 @@
                 `;
             }
 
-            // EDIT PRODUCT MODAL
             if (state.editProductModal) {
                 const p = state.products.find(prod => prod.id === state.editProductModal);
                 if (p) {
@@ -1252,11 +1227,11 @@
             return modalsHtml;
         }
 
-
         // ==========================================
-        // 6. CONTROLLERS & ACTIONS (Auth, Products, Orders)
+        // 6. CONTROLLERS WITH ROBUST TRY/CATCH & DEBUG LOGS
         // ==========================================
         function openAuthModal(tab = 'login') {
+            console.log("openAuthModal called with tab:", tab);
             state.authModalOpen = true;
             state.authTab = tab;
             render();
@@ -1264,59 +1239,72 @@
 
         async function handleRegister(e) {
             e.preventDefault();
-            const fd = new FormData(e.target);
-            const email = fd.get('email').trim();
-            if (state.users.some(u => u.email === email)) {
-                showToast("El email ya está registrado", "error");
-                return;
+            console.log("handleRegister triggered");
+            try {
+                const fd = new FormData(e.target);
+                const email = fd.get('email').trim();
+                if (state.users.some(u => u.email === email)) {
+                    showToast("El email ya está registrado", "error");
+                    return;
+                }
+
+                const nombreTienda = fd.get('nombreTienda');
+                const slug = nombreTienda.toLowerCase().replace(/[^a-z0-9]/g, '-') + '-' + Math.random().toString(36).substring(2, 6);
+
+                const newUser = {
+                    id: 'user_' + Date.now(),
+                    nombreTienda,
+                    dueño: fd.get('dueño'),
+                    email,
+                    wsp: fd.get('wsp'),
+                    password: fd.get('password'),
+                    zona: fd.get('zona'),
+                    vehiculo: fd.get('vehiculo'),
+                    slug,
+                    fotoPerfil: '',
+                    fotosCarrusel: [],
+                    catalogo: { titulo: 'Catálogo ' + nombreTienda, desc: 'Envíos en el día en Tres Arroyos', bienvenida: '¡Gracias por elegirnos!', color: '#0f766e', destacadosIds: [], mostrarInfo: 'Si' }
+                };
+
+                state.users.push(newUser);
+                state.session = { email: newUser.email };
+                state.authModalOpen = false;
+                saveLocal();
+                await syncWithSheets('register_user', newUser);
+                showToast("¡Tienda registrada con éxito!");
+                window.location.hash = '#mi-tienda';
+            } catch (err) {
+                console.error("Error in handleRegister:", err);
+                showToast("Error al registrar tienda: " + err.message, "error");
             }
-
-            const nombreTienda = fd.get('nombreTienda');
-            const slug = nombreTienda.toLowerCase().replace(/[^a-z0-9]/g, '-') + '-' + Math.random().toString(36).substring(2, 6);
-
-            const newUser = {
-                id: 'user_' + Date.now(),
-                nombreTienda,
-                dueño: fd.get('dueño'),
-                email,
-                wsp: fd.get('wsp'),
-                password: fd.get('password'),
-                zona: fd.get('zona'),
-                vehiculo: fd.get('vehiculo'),
-                slug,
-                fotoPerfil: '',
-                fotosCarrusel: [],
-                catalogo: { titulo: 'Catálogo ' + nombreTienda, desc: 'Envíos en el día en Tres Arroyos', bienvenida: '¡Gracias por elegirnos!', color: '#0f766e', destacadosIds: [], mostrarInfo: 'Si' }
-            };
-
-            state.users.push(newUser);
-            state.session = { email: newUser.email };
-            state.authModalOpen = false;
-            saveLocal();
-            syncWithSheets('register_user', newUser);
-            showToast("¡Tienda registrada con éxito!");
-            window.location.hash = '#mi-tienda';
         }
 
         function handleLogin(e) {
             e.preventDefault();
-            const fd = new FormData(e.target);
-            const email = fd.get('email').trim();
-            const pass = fd.get('password');
+            console.log("handleLogin triggered");
+            try {
+                const fd = new FormData(e.target);
+                const email = fd.get('email').trim();
+                const pass = fd.get('password');
 
-            const user = state.users.find(u => u.email === email && u.password === pass);
-            if (user) {
-                state.session = { email: user.email };
-                state.authModalOpen = false;
-                saveLocal();
-                showToast("¡Sesión iniciada!");
-                window.location.hash = '#mi-tienda';
-            } else {
-                showToast("Email o contraseña incorrectos", "error");
+                const user = state.users.find(u => u.email === email && u.password === pass);
+                if (user) {
+                    state.session = { email: user.email };
+                    state.authModalOpen = false;
+                    saveLocal();
+                    showToast("¡Sesión iniciada!");
+                    window.location.hash = '#mi-tienda';
+                } else {
+                    showToast("Email o contraseña incorrectos", "error");
+                }
+            } catch (err) {
+                console.error("Error in handleLogin:", err);
+                showToast("Error al iniciar sesión", "error");
             }
         }
 
         function logout() {
+            console.log("logout triggered");
             state.session = null;
             saveLocal();
             showToast("Sesión cerrada");
@@ -1325,35 +1313,42 @@
 
         async function handleCreateProduct(e) {
             e.preventDefault();
-            const fd = new FormData(e.target);
-            const fotosInput = document.getElementById('new-prod-fotos');
-            let fotos = [];
-            if (fotosInput && fotosInput.files.length > 0) {
-                fotos = await compressMultiple(fotosInput.files, 4);
+            console.log("handleCreateProduct triggered");
+            try {
+                const fd = new FormData(e.target);
+                const fotosInput = document.getElementById('new-prod-fotos');
+                let fotos = [];
+                if (fotosInput && fotosInput.files.length > 0) {
+                    fotos = await compressMultiple(fotosInput.files, 4, 0.6);
+                }
+
+                const newProd = {
+                    id: 'prod_' + Math.random().toString(36).substring(2, 6),
+                    vendorEmail: state.session.email,
+                    nombre: fd.get('nombre'),
+                    precio: Number(fd.get('precio')),
+                    categoria: fd.get('categoria'),
+                    descripcion: fd.get('descripcion'),
+                    stock: fd.get('stock') === 'Si',
+                    envioPropio: fd.get('envioPropio') === 'Si',
+                    fotos,
+                    activo: true
+                };
+
+                state.products.push(newProd);
+                saveLocal();
+                await syncWithSheets('create_product', newProd);
+                showToast("¡Producto publicado con éxito!");
+                e.target.reset();
+                render();
+            } catch (err) {
+                console.error("Error creating product:", err);
+                showToast("Error al guardar producto: " + err.message, "error");
             }
-
-            const newProd = {
-                id: 'prod_' + Math.random().toString(36).substring(2, 6),
-                vendorEmail: state.session.email,
-                nombre: fd.get('nombre'),
-                precio: Number(fd.get('precio')),
-                categoria: fd.get('categoria'),
-                descripcion: fd.get('descripcion'),
-                stock: fd.get('stock') === 'Si',
-                envioPropio: fd.get('envioPropio') === 'Si',
-                fotos,
-                activo: true
-            };
-
-            state.products.push(newProd);
-            saveLocal();
-            syncWithSheets('create_product', newProd);
-            showToast("¡Producto publicado con éxito!");
-            e.target.reset();
-            render();
         }
 
         function toggleProductStatus(id) {
+            console.log("toggleProductStatus:", id);
             const p = state.products.find(prod => prod.id === id);
             if (p) {
                 p.activo = p.activo === false ? true : false;
@@ -1364,6 +1359,7 @@
         }
 
         function deleteProduct(id) {
+            console.log("deleteProduct:", id);
             if (confirm("¿Estás seguro de borrar este producto?")) {
                 state.products = state.products.filter(p => p.id !== id);
                 saveLocal();
@@ -1374,170 +1370,195 @@
         }
 
         function openEditProductModal(id) {
+            console.log("openEditProductModal:", id);
             state.editProductModal = id;
             render();
         }
 
         async function handleUpdateProduct(e, id) {
             e.preventDefault();
-            const fd = new FormData(e.target);
-            const p = state.products.find(prod => prod.id === id);
-            if (!p) return;
+            console.log("handleUpdateProduct:", id);
+            try {
+                const fd = new FormData(e.target);
+                const p = state.products.find(prod => prod.id === id);
+                if (!p) return;
 
-            p.nombre = fd.get('nombre');
-            p.precio = Number(fd.get('precio'));
-            p.categoria = fd.get('categoria');
-            p.descripcion = fd.get('descripcion');
+                p.nombre = fd.get('nombre');
+                p.precio = Number(fd.get('precio'));
+                p.categoria = fd.get('categoria');
+                p.descripcion = fd.get('descripcion');
 
-            const fotosInput = e.target.querySelector('input[type="file"]');
-            if (fotosInput && fotosInput.files.length > 0) {
-                p.fotos = await compressMultiple(fotosInput.files, 4);
+                const fotosInput = e.target.querySelector('input[type="file"]');
+                if (fotosInput && fotosInput.files.length > 0) {
+                    p.fotos = await compressMultiple(fotosInput.files, 4, 0.6);
+                }
+
+                state.editProductModal = null;
+                saveLocal();
+                await syncWithSheets('update_product', p);
+                showToast("Producto actualizado");
+                render();
+            } catch (err) {
+                console.error("Error updating product:", err);
+                showToast("Error al actualizar producto", "error");
             }
-
-            state.editProductModal = null;
-            saveLocal();
-            syncWithSheets('update_product', p);
-            showToast("Producto actualizado");
-            render();
         }
 
         function openEditStoreModal() {
+            console.log("openEditStoreModal triggered");
             state.editStoreModalOpen = true;
             render();
         }
 
         async function handleSaveStore(e) {
             e.preventDefault();
-            const fd = new FormData(e.target);
-            const v = state.users.find(u => u.email === state.session.email);
-            if (!v) return;
+            console.log("handleSaveStore triggered");
+            try {
+                const fd = new FormData(e.target);
+                const v = state.users.find(u => u.email === state.session.email);
+                if (!v) return;
 
-            v.nombreTienda = fd.get('nombreTienda');
-            v.descripcion = fd.get('descripcion');
-            v.direccion = fd.get('direccion');
-            v.zona = fd.get('zona');
-            v.wsp = fd.get('wsp');
-            v.instagram = fd.get('instagram');
-            v.horario = fd.get('horario');
-            v.vehiculo = fd.get('vehiculo');
+                v.nombreTienda = fd.get('nombreTienda');
+                v.descripcion = fd.get('descripcion');
+                v.direccion = fd.get('direccion');
+                v.zona = fd.get('zona');
+                v.wsp = fd.get('wsp');
+                v.instagram = fd.get('instagram');
+                v.horario = fd.get('horario');
+                v.vehiculo = fd.get('vehiculo');
 
-            const fotoPerfilInput = e.target.querySelector('input[name="fotoPerfil"]');
-            if (fotoPerfilInput && fotoPerfilInput.files.length > 0) {
-                v.fotoPerfil = await compressImage(fotoPerfilInput.files[0], 400, 0.7);
+                const fotoPerfilInput = e.target.querySelector('input[name="fotoPerfil"]');
+                if (fotoPerfilInput && fotoPerfilInput.files.length > 0) {
+                    v.fotoPerfil = await compressImage(fotoPerfilInput.files[0], 400, 0.6);
+                }
+
+                const fotosCarruselInput = e.target.querySelector('input[name="fotosCarrusel"]');
+                if (fotosCarruselInput && fotosCarruselInput.files.length > 0) {
+                    v.fotosCarrusel = await compressMultiple(fotosCarruselInput.files, 6, 0.6);
+                }
+
+                state.editStoreModalOpen = false;
+                saveLocal();
+                await syncWithSheets('update_user', v);
+                showToast("¡Tienda actualizada correctamente!");
+                render();
+            } catch (err) {
+                console.error("Error in handleSaveStore:", err);
+                showToast("Error al guardar tienda: " + err.message, "error");
             }
-
-            const fotosCarruselInput = e.target.querySelector('input[name="fotosCarrusel"]');
-            if (fotosCarruselInput && fotosCarruselInput.files.length > 0) {
-                v.fotosCarrusel = await compressMultiple(fotosCarruselInput.files, 6);
-            }
-
-            state.editStoreModalOpen = false;
-            saveLocal();
-            syncWithSheets('update_user', v);
-            showToast("¡Tienda actualizada correctamente!");
-            render();
         }
 
         function openEditCatalogModal() {
+            console.log("openEditCatalogModal triggered");
             state.editCatalogModalOpen = true;
             render();
         }
 
         async function handleSaveCatalog(e) {
             e.preventDefault();
-            const fd = new FormData(e.target);
-            const v = state.users.find(u => u.email === state.session.email);
-            if (!v) return;
+            console.log("handleSaveCatalog triggered");
+            try {
+                const fd = new FormData(e.target);
+                const v = state.users.find(u => u.email === state.session.email);
+                if (!v) return;
 
-            const destacadosIds = Array.from(e.target.querySelectorAll('input[name="destacado"]:checked')).map(cb => cb.value);
+                const destacadosIds = Array.from(e.target.querySelectorAll('input[name="destacado"]:checked')).map(cb => cb.value);
 
-            v.catalogo = {
-                titulo: fd.get('titulo'),
-                desc: fd.get('desc'),
-                bienvenida: fd.get('bienvenida'),
-                color: fd.get('color'),
-                mostrarInfo: fd.get('mostrarInfo'),
-                destacadosIds
-            };
+                v.catalogo = {
+                    titulo: fd.get('titulo'),
+                    desc: fd.get('desc'),
+                    bienvenida: fd.get('bienvenida'),
+                    color: fd.get('color'),
+                    mostrarInfo: fd.get('mostrarInfo'),
+                    destacadosIds
+                };
 
-            state.editCatalogModalOpen = false;
-            saveLocal();
-            syncWithSheets('update_user', v);
-            showToast("¡Catálogo actualizado!");
-            render();
+                state.editCatalogModalOpen = false;
+                saveLocal();
+                await syncWithSheets('update_user', v);
+                showToast("¡Catálogo actualizado!");
+                render();
+            } catch (err) {
+                console.error("Error in handleSaveCatalog:", err);
+                showToast("Error al guardar catálogo", "error");
+            }
         }
 
         function openProductModal(id) {
+            console.log("openProductModal:", id);
             state.selectedProductModal = id;
             state.checkoutData = { cant: 1, cliente: '', direccion: '', nota: '', flash: false };
             render();
         }
 
-        function enviarPedidoWhatsApp(productId) {
-            const p = state.products.find(prod => prod.id === productId);
-            const vendor = state.users.find(u => u.email === p.vendorEmail);
-            if (!p || !vendor) return;
+        async function enviarPedidoWhatsApp(productId) {
+            console.log("enviarPedidoWhatsApp:", productId);
+            try {
+                const p = state.products.find(prod => prod.id === productId);
+                const vendor = state.users.find(u => u.email === p.vendorEmail);
+                if (!p || !vendor) return;
 
-            const cant = state.checkoutData.cant;
-            const cliente = state.checkoutData.cliente.trim() || 'Cliente';
-            const direccion = state.checkoutData.direccion.trim() || 'Tres Arroyos';
-            const nota = state.checkoutData.nota.trim();
-            const flash = state.checkoutData.flash;
+                const cant = state.checkoutData.cant;
+                const cliente = state.checkoutData.cliente.trim() || 'Cliente';
+                const direccion = state.checkoutData.direccion.trim() || 'Tres Arroyos';
+                const nota = state.checkoutData.nota.trim();
+                const flash = state.checkoutData.flash;
 
-            const subtotal = p.precio * cant;
-            const flashFee = flash ? 2000 : 0;
-            const totalCliente = subtotal + flashFee;
+                const subtotal = p.precio * cant;
+                const flashFee = flash ? 2000 : 0;
+                const totalCliente = subtotal + flashFee;
 
-            let mensaje = `Hola ${vendor.nombreTienda}! Nuevo pedido de Tres Arroyos Market:\n📦 ${p.nombre} x${cant} - $${subtotal.toLocaleString('es-AR')}\n👤 Cliente: ${cliente}\n📍 Dirección: ${direccion}`;
-            if (nota) mensaje += `\n📝 Nota: ${nota}`;
-            if (flash) {
-                mensaje += `\n🚚 FLASH: SI (Comisión 10% + Viaje $2000). Coordinar con central: +549${CENTRAL_WSP}`;
-            } else {
-                mensaje += `\n🚚 Envío propio del local.`;
+                let mensaje = `Hola ${vendor.nombreTienda}! Nuevo pedido de Tres Arroyos Market:\n📦 ${p.nombre} x${cant} - $${subtotal.toLocaleString('es-AR')}\n👤 Cliente: ${cliente}\n📍 Dirección: ${direccion}`;
+                if (nota) mensaje += `\n📝 Nota: ${nota}`;
+                if (flash) {
+                    mensaje += `\n🚚 FLASH: Retiramos en tu local y entregamos en el día. 10% + $2.000 envío cliente. Coordinar con central: +549${CENTRAL_WSP}`;
+                } else {
+                    mensaje += `\n🚚 Envío propio del local.`;
+                }
+                mensaje += `\nTotal cliente: $${totalCliente.toLocaleString('es-AR')}`;
+
+                const newOrder = {
+                    id: 'ord_' + Date.now(),
+                    vendorEmail: vendor.email,
+                    tiendaNombre: vendor.nombreTienda,
+                    productoId: p.id,
+                    productoNombre: p.nombre,
+                    cantidad: cant,
+                    subtotal,
+                    totalCliente,
+                    cliente,
+                    direccion,
+                    nota,
+                    flash,
+                    fecha: new Date().toISOString()
+                };
+
+                state.orders.push(newOrder);
+                saveLocal();
+                await syncWithSheets('create_order', newOrder);
+
+                window.open(`https://wa.me/549${vendor.wsp}?text=${encodeURIComponent(mensaje)}`, '_blank');
+
+                if (flash) {
+                    setTimeout(() => {
+                        window.open(`https://wa.me/${CENTRAL_WSP}?text=${encodeURIComponent('CENTRAL FLASH - Nuevo pedido:\n' + mensaje)}`, '_blank');
+                    }, 1500);
+                }
+
+                state.selectedProductModal = null;
+                showToast("¡Pedido enviado por WhatsApp!");
+                render();
+            } catch (err) {
+                console.error("Error in enviarPedidoWhatsApp:", err);
+                showToast("Error al procesar pedido", "error");
             }
-            mensaje += `\nTotal cliente: $${totalCliente.toLocaleString('es-AR')}`;
-
-            // Save order locally and sync
-            const newOrder = {
-                id: 'ord_' + Date.now(),
-                vendorEmail: vendor.email,
-                tiendaNombre: vendor.nombreTienda,
-                productoId: p.id,
-                productoNombre: p.nombre,
-                cantidad: cant,
-                subtotal,
-                totalCliente,
-                cliente,
-                direccion,
-                nota,
-                flash,
-                fecha: new Date().toISOString()
-            };
-
-            state.orders.push(newOrder);
-            saveLocal();
-            syncWithSheets('create_order', newOrder);
-
-            // Open WhatsApp Vendor
-            window.open(`https://wa.me/549${vendor.wsp}?text=${encodeURIComponent(mensaje)}`, '_blank');
-
-            // If flash, also open central
-            if (flash) {
-                setTimeout(() => {
-                    window.open(`https://wa.me/${CENTRAL_WSP}?text=${encodeURIComponent('CENTRAL FLASH - Nuevo pedido:\n' + mensaje)}`, '_blank');
-                }, 1500);
-            }
-
-            state.selectedProductModal = null;
-            showToast("¡Pedido enviado por WhatsApp!");
-            render();
         }
 
-        // --- INITIALIZATION ---
+        // --- INIT ---
         window.addEventListener('DOMContentLoaded', () => {
+            console.log("DOM fully loaded, initializing app...");
             fetchAllFromSheets();
             handleRoute();
-            // Periodic sync check every 15 sec
             setInterval(() => {
                 if (state.pendingSync.length > 0 && state.isOnline) {
                     let item = state.pendingSync.shift();
@@ -1547,4 +1568,4 @@
         });
     </script>
 </body>
-</html>
+    </html>
