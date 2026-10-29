@@ -51,7 +51,6 @@
             -ms-overflow-style: none;
             scrollbar-width: none;
         }
-        /* Responsive Grid Adjustments */
         @media (max-width: 768px) {
             .responsive-grid {
                 grid-template-columns: 1fr !important;
@@ -70,7 +69,6 @@
                 grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
             }
         }
-        /* Carousel height scaling */
         .store-carousel-img {
             height: 220px;
             object-fit: cover;
@@ -87,13 +85,19 @@
 
     <!-- SYNC STATUS BAR -->
     <div id="sync-bar" class="bg-slate-800 text-white text-xs py-1 px-4 text-center flex justify-between items-center z-50">
-        <span id="sync-status-text">● Sincronizado en tiempo real...</span>
+        <span id="sync-status-text">○ Cargando datos desde Sheets...</span>
         <button onclick="manualSync()" class="underline text-teal-300 hover:text-white">Actualizar</button>
     </div>
 
     <!-- MAIN APP CONTAINER -->
     <div id="app" class="flex-1 flex flex-col w-full">
         <!-- Rendered dynamically -->
+        <div class="flex-1 flex items-center justify-center py-32 text-center">
+            <div class="space-y-3">
+                <span class="text-4xl animate-spin inline-block">⏳</span>
+                <p class="text-sm font-semibold text-slate-600">Cargando Tres Arroyos Market...</p>
+            </div>
+        </div>
     </div>
 
     <!-- TOAST NOTIFICATION CONTAINER -->
@@ -104,15 +108,14 @@
         const SHEET_URL = "https://script.google.com/macros/s/AKfycbz6sUbdfJ23AOKNC0hwfGMWTeZ-9Ck4LpgeT4aEGmwm5SA3GVqtj-PGFBjx7PQh7ONWuA/exec";
         const CENTRAL_WSP = "5492983389710";
 
-        // APP STATE
+        // 100% GOOGLE SHEETS STATE (Only session in localStorage)
         let state = {
-            users: JSON.parse(localStorage.getItem('ta_users') || '[]'),
-            products: JSON.parse(localStorage.getItem('ta_products') || '[]'),
-            orders: JSON.parse(localStorage.getItem('ta_orders') || '[]'),
+            tiendas: [],
+            productos: [],
+            pedidos: [],
+            usuarios: [],
             session: JSON.parse(localStorage.getItem('ta_session') || 'null'),
-            pendingSync: JSON.parse(localStorage.getItem('ta_pending_sync') || '[]'),
             isOnline: true,
-            consecutiveErrors: 0,
             activeCategory: 'Todos',
             searchQuery: '',
             authTab: 'login',
@@ -124,14 +127,15 @@
             checkoutData: { cant: 1, cliente: '', direccion: '', nota: '', flash: false },
             adminAuthed: sessionStorage.getItem('ta_admin_auth') === 'true',
             currentView: 'catalogo',
-            activeSlug: null
+            activeSlug: null,
+            isLoading: true
         };
 
         const CATEGORIES = ['Todos', 'Alimentos', 'Servicios', 'Indumentaria', 'Hogar y Deco', 'Belleza', 'Oficios', 'Tecnología', 'Vehículos'];
         const ZONES_TRES_ARROYOS = ['Centro', 'Barrio Norte', 'Barrio Sur', 'Villa Italia', 'Villa Primavera', 'Quintas', 'Planta Urbana General'];
 
-        // --- COMPRESSION UTILS ---
-        async function compressImage(file, maxWidth = 700, quality = 0.55) {
+        // --- COMPRESSION (800px, quality 0.6) ---
+        async function compressImage(file, maxWidth = 800, quality = 0.6) {
             return new Promise((resolve) => {
                 if (!file) {
                     resolve('');
@@ -167,19 +171,12 @@
             });
         }
 
-        async function compressMultiple(fileList, maxCount = 4, quality = 0.55) {
+        async function compressMultiple(fileList, maxCount = 6, quality = 0.6) {
             try {
                 let files = Array.from(fileList).slice(0, maxCount);
-                let promises = files.map(f => compressImage(f, 700, quality));
+                let promises = files.map(f => compressImage(f, 800, quality));
                 let results = await Promise.all(promises);
                 let filtered = results.filter(r => r && r.length > 0);
-                
-                let totalStr = JSON.stringify(filtered);
-                if (totalStr.length > 3 * 1024 * 1024) {
-                    showToast("Foto muy grande, se optimizó", "error");
-                    let lowPromises = files.map(f => compressImage(f, 500, 0.4));
-                    filtered = await Promise.all(lowPromises);
-                }
                 return filtered;
             } catch (err) {
                 console.error("Error compressing images:", err);
@@ -187,92 +184,50 @@
             }
         }
 
-        // --- LOCAL STORAGE ---
-        function saveLocal() {
-            try {
-                localStorage.setItem('ta_users', JSON.stringify(state.users));
-                localStorage.setItem('ta_products', JSON.stringify(state.products));
-                localStorage.setItem('ta_orders', JSON.stringify(state.orders));
-                localStorage.setItem('ta_session', JSON.stringify(state.session));
-                localStorage.setItem('ta_pending_sync', JSON.stringify(state.pendingSync));
-            } catch (e) {
-                console.warn("LocalStorage Quota Exceeded. Cleaning old carousels...", e);
-                if (state.session && state.session.email) {
-                    state.users.forEach(u => {
-                        if (u.email !== state.session.email && u.fotosCarrusel) {
-                            u.fotosCarrusel = [];
-                        }
-                    });
-                }
-                try {
-                    localStorage.setItem('ta_users', JSON.stringify(state.users));
-                    localStorage.setItem('ta_products', JSON.stringify(state.products));
-                    localStorage.setItem('ta_orders', JSON.stringify(state.orders));
-                    localStorage.setItem('ta_session', JSON.stringify(state.session));
-                    showToast("Almacenamiento optimizado ✓");
-                } catch (err2) {
-                    console.error("Critical storage failure:", err2);
-                }
-            }
-        }
-
-        async function syncWithSheets(action, payload = {}) {
-            saveLocal();
-            try {
-                await fetch(SHEET_URL, {
-                    method: 'POST',
-                    mode: 'no-cors',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action, ...payload })
-                });
-                state.isOnline = true;
-                state.consecutiveErrors = 0;
-                updateSyncBar(true);
-            } catch (err) {
-                console.error("Sync error:", err);
-                state.isOnline = false;
-                state.consecutiveErrors++;
-                updateSyncBar(false);
-                state.pendingSync.push({ action, payload, time: Date.now() });
-                localStorage.setItem('ta_pending_sync', JSON.stringify(state.pendingSync));
-            }
-        }
-
-        async function loadFromSheets() {
-            // Do not override if user is currently interacting with an edit modal or auth modal
-            if (state.editStoreModalOpen || state.editCatalogModalOpen || state.authModalOpen || state.editProductModal) {
+        // --- FETCH MASTER FROM SHEETS ---
+        async function fetchAllFromSheets(isBackground = false) {
+            // Do not override if user is actively editing a form/modal
+            if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') && isBackground) {
                 return;
             }
-            try {
-                const res = await fetch(`${SHEET_URL}?action=get_all`);
-                const data = await res.json();
-                if (data && data.users) {
-                    let hasChanged = false;
-                    if (JSON.stringify(data.users) !== JSON.stringify(state.users) ||
-                        JSON.stringify(data.products) !== JSON.stringify(state.products)) {
-                        hasChanged = true;
-                    }
-                    
-                    state.users = data.users.length > 0 ? data.users : state.users;
-                    state.products = data.products.length > 0 ? data.products : state.products;
-                    state.orders = data.orders.length > 0 ? data.orders : state.orders;
-                    saveLocal();
 
+            try {
+                const res = await fetch(`${SHEET_URL}?action=get_all`, { cache: 'no-store' });
+                const data = await res.json();
+                
+                if (data) {
+                    const newTiendas = data.tiendas || [];
+                    const newProductos = data.productos || [];
+                    const newPedidos = data.pedidos || [];
+                    const newUsuarios = data.usuarios || [];
+
+                    const hasChanged = 
+                        JSON.stringify(newTiendas) !== JSON.stringify(state.tiendas) ||
+                        JSON.stringify(newProductos) !== JSON.stringify(state.productos) ||
+                        JSON.stringify(newPedidos) !== JSON.stringify(state.pedidos);
+
+                    state.tiendas = newTiendas;
+                    state.productos = newProductos;
+                    state.pedidos = newPedidos;
+                    state.usuarios = newUsuarios;
                     state.isOnline = true;
-                    state.consecutiveErrors = 0;
+                    state.isLoading = false;
+
                     updateSyncBar(true);
 
-                    if (hasChanged) {
+                    if (hasChanged && isBackground) {
                         showToast("Nueva actualización ↓");
+                        render();
+                    } else if (!isBackground) {
                         render();
                     }
                 }
-            } catch (e) {
-                state.consecutiveErrors++;
-                if (state.consecutiveErrors >= 3) {
-                    state.isOnline = false;
-                    updateSyncBar(false);
-                }
+            } catch (err) {
+                console.error("Error fetching from Sheets:", err);
+                state.isOnline = false;
+                state.isLoading = false;
+                updateSyncBar(false);
+                if (!isBackground) render();
             }
         }
 
@@ -282,19 +237,29 @@
             if (!bar || !txt) return;
             if (online) {
                 bar.className = "bg-teal-800 text-white text-xs py-1 px-4 text-center flex justify-between items-center z-50";
-                txt.innerText = "● Sincronizado en tiempo real";
+                txt.innerHTML = "● En vivo (Sheets)";
             } else {
                 bar.className = "bg-amber-700 text-white text-xs py-1 px-4 text-center flex justify-between items-center z-50";
-                txt.innerText = "○ Offline - Modo Local";
+                txt.innerHTML = "○ Sin conexión con Google Sheets";
             }
         }
 
         function manualSync() {
-            showToast("Sincronizando datos...");
-            loadFromSheets();
-            if (state.pendingSync.length > 0) {
-                let item = state.pendingSync.shift();
-                syncWithSheets(item.action, item.payload);
+            showToast("Sincronizando con Sheets...");
+            fetchAllFromSheets(false);
+        }
+
+        // --- POST TO SHEETS (NO-CORS, FIRE & FORGET) ---
+        function postToSheets(action, payload) {
+            try {
+                fetch(SHEET_URL, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action, ...payload })
+                });
+            } catch (err) {
+                console.error("Error posting to sheets:", err);
             }
         }
 
@@ -357,7 +322,7 @@
                 hashSlug = hash.replace('#t/', '');
             } else if (hash.startsWith('#c/')) {
                 hashSlug = hash.replace('#c/', '');
-            } else if (hash.startsWith('#')) {
+            } else if (hash.startsWith('#') && hash !== '#admin' && hash !== '#mi-tienda') {
                 hashSlug = hash.replace('#', '');
             }
 
@@ -386,6 +351,18 @@
         function render() {
             const app = document.getElementById('app');
             if (!app) return;
+
+            if (state.isLoading) {
+                app.innerHTML = `
+                    <div class="flex-1 flex items-center justify-center py-32 text-center">
+                        <div class="space-y-3">
+                            <span class="text-4xl animate-spin inline-block">⏳</span>
+                            <p class="text-sm font-semibold text-slate-600">Cargando datos desde Google Sheets...</p>
+                        </div>
+                    </div>
+                `;
+                return;
+            }
 
             let html = '';
             if (state.currentView === 'admin') {
@@ -456,17 +433,17 @@
         // 1. GENERAL CATALOG & HEADER SESSION
         // ==========================================
         function renderGeneralCatalogView() {
-            const activeUser = state.session ? state.users.find(u => u.email === state.session.email) : null;
+            const activeUser = state.session ? state.tiendas.find(u => u.email === state.session.email || u.dueño === state.session.email) : null;
             const primaryColor = activeUser && activeUser.catalogo && activeUser.catalogo.color ? activeUser.catalogo.color : '#0f766e';
             document.documentElement.style.setProperty('--primary-color', primaryColor);
 
-            let filteredProducts = state.products.filter(p => p.activo !== false);
+            let filteredProducts = state.productos.filter(p => p.activo !== false && p.activo !== 'false');
             if (state.activeCategory !== 'Todos') {
                 filteredProducts = filteredProducts.filter(p => p.categoria === state.activeCategory);
             }
             if (state.searchQuery.trim() !== '') {
                 const q = state.searchQuery.toLowerCase();
-                filteredProducts = filteredProducts.filter(p => p.nombre.toLowerCase().includes(q) || p.descripcion.toLowerCase().includes(q));
+                filteredProducts = filteredProducts.filter(p => p.nombre.toLowerCase().includes(q) || (p.descripcion && p.descripcion.toLowerCase().includes(q)));
             }
 
             return `
@@ -535,8 +512,14 @@
                     ` : `
                         <div class="grid responsive-grid gap-4">
                             ${filteredProducts.map(p => {
-                                const vendor = state.users.find(u => u.email === p.vendorEmail) || { nombreTienda: 'Local Local', slug: '#' };
-                                const fotos = p.fotos && p.fotos.length > 0 ? p.fotos : ['https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500'];
+                                const vendor = state.tiendas.find(u => u.email === p.vendorEmail || u.slug === p.tiendaSlug) || { nombreTienda: 'Local Local', slug: '#' };
+                                let fotos = ['https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500'];
+                                try {
+                                    if (p.fotos) {
+                                        let parsed = typeof p.fotos === 'string' ? JSON.parse(p.fotos) : p.fotos;
+                                        if (Array.isArray(parsed) && parsed.length > 0) fotos = parsed;
+                                    }
+                                } catch(e) {}
                                 const cId = 'prod_card_' + p.id;
                                 return `
                                     <div onclick="openProductModal('${p.id}')" class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col cursor-pointer hover:shadow-md transition responsive-card">
@@ -555,7 +538,7 @@
                                         </div>
                                         <div class="p-3 flex flex-col flex-1 justify-between">
                                             <div>
-                                                <span class="text-[11px] text-teal-700 font-semibold block truncate">${vendor.nombreTienda}</span>
+                                                <span class="text-[11px] text-teal-700 font-semibold block truncate">${vendor.nombreTienda || 'Comercio Local'}</span>
                                                 <h3 class="text-sm font-bold text-slate-800 line-clamp-1">${p.nombre}</h3>
                                                 <p class="text-xs text-slate-500 line-clamp-1 mt-0.5">${p.descripcion || ''}</p>
                                             </div>
@@ -582,24 +565,39 @@
         // 2. TIENDA PÚBLICA VIEW (#t/{slug})
         // ==========================================
         function renderTiendaPublicaView() {
-            const vendor = state.users.find(u => u.slug === state.activeSlug);
+            const vendor = state.tiendas.find(u => u.slug === state.activeSlug);
             if (!vendor) {
                 return `
-                    <div class="max-w-md mx-auto px-4 py-20 text-center">
-                        <span class="text-5xl mb-4 block">🔍</span>
+                    <div class="max-w-md mx-auto px-4 py-20 text-center space-y-4">
+                        <span class="text-5xl mb-2 block">🔍</span>
                         <h2 class="text-xl font-bold text-slate-800">Tienda no encontrada</h2>
-                        <p class="text-slate-500 text-sm mt-2">El enlace ingresado no corresponde a ningún comercio activo en Tres Arroyos Market.</p>
-                        <a href="#" class="mt-6 inline-block bg-teal-700 text-white font-medium px-6 py-3 rounded-2xl">Ver todas las tiendas / Volver al inicio</a>
+                        <p class="text-slate-500 text-sm">El enlace ingresado no corresponde a ningún comercio activo en Tres Arroyos Market.</p>
+                        <a href="#" class="mt-4 inline-block bg-teal-700 text-white font-medium px-6 py-3 rounded-2xl">Ver todas las tiendas</a>
                     </div>
                 `;
             }
 
-            const primaryColor = vendor.catalogo && vendor.catalogo.color ? vendor.catalogo.color : '#0f766e';
+            let catalogoConfig = { titulo: 'Catálogo de Productos', desc: '¡Bienvenidos a nuestra tienda online!', bienvenida: '¡Gracias por apoyar el comercio local!', mostrarInfo: 'Si', destacadosIds: [] };
+            try {
+                if (vendor.catalogo) {
+                    catalogoConfig = typeof vendor.catalogo === 'string' ? JSON.parse(vendor.catalogo) : vendor.catalogo;
+                }
+            } catch(e) {}
+
+            const primaryColor = catalogoConfig.color || '#0f766e';
             document.documentElement.style.setProperty('--primary-color', primaryColor);
 
-            const prods = state.products.filter(p => p.vendorEmail === vendor.email && p.activo !== false);
-            const bannerFotos = vendor.fotosCarrusel && vendor.fotosCarrusel.length > 0 ? vendor.fotosCarrusel : (vendor.fotoPortada ? [vendor.fotoPortada] : ['https://images.unsplash.com/photo-1557804506-669a67965ba0?w=1200']);
-            const catalogoConfig = vendor.catalogo || { titulo: 'Catálogo de Productos', desc: '¡Bienvenidos a nuestra tienda online!', bienvenida: '¡Gracias por apoyar el comercio local!', mostrarInfo: 'Si' };
+            const prods = state.productos.filter(p => (p.vendorEmail === vendor.email || p.tiendaSlug === vendor.slug) && p.activo !== false && p.activo !== 'false');
+            
+            let bannerFotos = ['https://images.unsplash.com/photo-1557804506-669a67965ba0?w=1200'];
+            try {
+                if (vendor.fotosCarrusel) {
+                    let parsed = typeof vendor.fotosCarrusel === 'string' ? JSON.parse(vendor.fotosCarrusel) : vendor.fotosCarrusel;
+                    if (Array.isArray(parsed) && parsed.length > 0) bannerFotos = parsed;
+                } else if (vendor.fotoPortada) {
+                    bannerFotos = [vendor.fotoPortada];
+                }
+            } catch(e) {}
             
             const destacadosIds = catalogoConfig.destacadosIds || [];
             const destacadosProds = prods.filter(p => destacadosIds.includes(p.id));
@@ -632,18 +630,18 @@
                             <img src="${vendor.fotoPerfil || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200'}" class="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl object-cover border-2 border-white shadow-lg bg-white">
                             <div class="text-white drop-shadow">
                                 <h1 class="text-xl sm:text-2xl font-extrabold">${vendor.nombreTienda}</h1>
-                                <p class="text-xs text-teal-100 flex items-center gap-1">📍 ${vendor.zona} ${vendor.vehiculo === 'Si' ? '• 🚚 Con envío propio' : '• ⚡ Envío por Flash'}</p>
+                                <p class="text-xs text-teal-100 flex items-center gap-1">📍 ${vendor.zona || 'Tres Arroyos'} ${vendor.vehiculo === 'Si' ? '• 🚚 Con envío propio' : '• ⚡ Envío por Flash'}</p>
                             </div>
                         </div>
                     </div>
 
                     <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 space-y-4">
                         <div class="bg-teal-50 border border-teal-100 rounded-2xl p-4 text-teal-900 text-sm">
-                            <p class="font-bold mb-1">👋 ${catalogoConfig.bienvenida}</p>
-                            <p class="text-slate-600">${vendor.descripcion || catalogoConfig.desc}</p>
+                            <p class="font-bold mb-1">👋 ${catalogoConfig.bienvenida || '¡Bienvenidos!'}</p>
+                            <p class="text-slate-600">${vendor.descripcion || catalogoConfig.desc || ''}</p>
                         </div>
 
-                        ${catalogoConfig.mostrarInfo === 'Si' ? `
+                        ${catalogoConfig.mostrarInfo === 'Si' || !catalogoConfig.mostrarInfo ? `
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-slate-600 pt-2 border-t border-slate-100">
                                 <div><b>Dirección:</b> ${vendor.direccion || 'Consultar por WhatsApp'}</div>
                                 <div><b>Horarios:</b> ${vendor.horario || 'Lunes a Sábados'}</div>
@@ -655,8 +653,8 @@
                     </div>
 
                     <div>
-                        <h2 class="text-xl font-extrabold text-slate-900">${catalogoConfig.titulo}</h2>
-                        <p class="text-xs text-slate-500">${catalogoConfig.desc}</p>
+                        <h2 class="text-xl font-extrabold text-slate-900">${catalogoConfig.titulo || 'Catálogo'}</h2>
+                        <p class="text-xs text-slate-500">${catalogoConfig.desc || ''}</p>
                     </div>
 
                     ${destacadosProds.length > 0 ? `
@@ -692,7 +690,13 @@
         }
 
         function renderProductCard(p, isFeatured) {
-            const fotos = p.fotos && p.fotos.length > 0 ? p.fotos : ['https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500'];
+            let fotos = ['https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500'];
+            try {
+                if (p.fotos) {
+                    let parsed = typeof p.fotos === 'string' ? JSON.parse(p.fotos) : p.fotos;
+                    if (Array.isArray(parsed) && parsed.length > 0) fotos = parsed;
+                }
+            } catch(e) {}
             const cId = 'prod_card_pub_' + p.id;
             return `
                 <div onclick="openProductModal('${p.id}')" class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col cursor-pointer hover:shadow-md transition ${isFeatured ? 'ring-2 ring-teal-600/30' : ''} responsive-card">
@@ -744,15 +748,15 @@
                 `;
             }
 
-            const vendor = state.users.find(u => u.email === state.session.email);
+            const vendor = state.tiendas.find(u => u.email === state.session.email || u.dueño === state.session.email);
             if (!vendor) {
                 logout();
                 return '';
             }
 
-            const myProducts = state.products.filter(p => p.vendorEmail === vendor.email);
-            const myOrders = state.orders.filter(o => o.vendorEmail === vendor.email);
-            const flashOrdersCount = myOrders.filter(o => o.flash).length;
+            const myProducts = state.productos.filter(p => p.vendorEmail === vendor.email || p.tiendaSlug === vendor.slug);
+            const myOrders = state.pedidos.filter(o => o.vendorEmail === vendor.email || o.tiendaNombre === vendor.nombreTienda);
+            const flashOrdersCount = myOrders.filter(o => o.flash === true || o.flash === 'true' || o.flash === 'TRUE').length;
             const publicLink = `${window.location.origin}${window.location.pathname}#t/${vendor.slug}`;
 
             return `
@@ -826,7 +830,7 @@
                                     </select>
                                 </div>
                                 <div class="space-y-1">
-                                    <label class="text-xs font-semibold text-slate-700">Fotos del Producto (Hasta 4)</label>
+                                    <label class="text-xs font-semibold text-slate-700">Fotos del Producto (Hasta 6)</label>
                                     <input type="file" name="fotos" accept="image/*" multiple id="new-prod-fotos" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-3 py-2 text-xs file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100">
                                 </div>
                             </div>
@@ -859,23 +863,33 @@
                             <p class="text-slate-500 text-sm text-center py-6">Todavía no cargaste ningún producto.</p>
                         ` : `
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                ${myProducts.map(p => `
-                                    <div class="border border-slate-200 rounded-2xl p-3 flex items-center justify-between gap-3 bg-slate-50">
-                                        <div class="flex items-center gap-3">
-                                            <img src="${p.fotos && p.fotos.length > 0 ? p.fotos[0] : 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=100'}" class="w-14 h-14 rounded-xl object-cover">
-                                            <div>
-                                                <h4 class="text-sm font-bold text-slate-800 line-clamp-1">${p.nombre}</h4>
-                                                <span class="text-xs font-extrabold text-teal-800">$${Number(p.precio).toLocaleString('es-AR')}</span>
-                                                <span class="text-[10px] block text-slate-500">${p.categoria} • ${p.activo !== false ? '🟢 Activo' : '🔴 Pausado'}</span>
+                                ${myProducts.map(p => {
+                                    let pFoto = 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=100';
+                                    try {
+                                        if (p.fotos) {
+                                            let parsed = typeof p.fotos === 'string' ? JSON.parse(p.fotos) : p.fotos;
+                                            if (Array.isArray(parsed) && parsed.length > 0) pFoto = parsed[0];
+                                        }
+                                    } catch(e) {}
+                                    const isActive = p.activo !== false && p.activo !== 'false';
+                                    return `
+                                        <div class="border border-slate-200 rounded-2xl p-3 flex items-center justify-between gap-3 bg-slate-50">
+                                            <div class="flex items-center gap-3">
+                                                <img src="${pFoto}" class="w-14 h-14 rounded-xl object-cover">
+                                                <div>
+                                                    <h4 class="text-sm font-bold text-slate-800 line-clamp-1">${p.nombre}</h4>
+                                                    <span class="text-xs font-extrabold text-teal-800">$${Number(p.precio).toLocaleString('es-AR')}</span>
+                                                    <span class="text-[10px] block text-slate-500">${p.categoria} • ${isActive ? '🟢 Activo' : '🔴 Pausado'}</span>
+                                                </div>
+                                            </div>
+                                            <div class="flex flex-col gap-1.5">
+                                                <button onclick="toggleProductStatus('${p.id}')" class="text-[11px] bg-slate-200 hover:bg-slate-300 px-2.5 py-1 rounded-xl font-medium">${isActive ? 'Pausar' : 'Activar'}</button>
+                                                <button onclick="openEditProductModal('${p.id}')" class="text-[11px] bg-teal-50 text-teal-800 hover:bg-teal-100 px-2.5 py-1 rounded-xl font-medium">Editar</button>
+                                                <button onclick="deleteProduct('${p.id}')" class="text-[11px] bg-rose-50 text-rose-700 hover:bg-rose-100 px-2.5 py-1 rounded-xl font-medium">Borrar</button>
                                             </div>
                                         </div>
-                                        <div class="flex flex-col gap-1.5">
-                                            <button onclick="toggleProductStatus('${p.id}')" class="text-[11px] bg-slate-200 hover:bg-slate-300 px-2.5 py-1 rounded-xl font-medium">${p.activo !== false ? 'Pausar' : 'Activar'}</button>
-                                            <button onclick="openEditProductModal('${p.id}')" class="text-[11px] bg-teal-50 text-teal-800 hover:bg-teal-100 px-2.5 py-1 rounded-xl font-medium">Editar</button>
-                                            <button onclick="deleteProduct('${p.id}')" class="text-[11px] bg-rose-50 text-rose-700 hover:bg-rose-100 px-2.5 py-1 rounded-xl font-medium">Borrar</button>
-                                        </div>
-                                    </div>
-                                `).join('')}
+                                    `;
+                                }).join('')}
                             </div>
                         `}
                     </div>
@@ -889,14 +903,14 @@
                                 ${myOrders.map(o => `
                                     <div class="border border-slate-200 rounded-2xl p-4 bg-slate-50 space-y-2 text-xs">
                                         <div class="flex justify-between items-center font-bold text-slate-800 text-sm">
-                                            <span>📦 ${o.productoNombre} x${o.cantidad}</span>
-                                            <span class="text-teal-800">$${Number(o.totalCliente).toLocaleString('es-AR')}</span>
+                                            <span>📦 ${o.productoNombre || 'Producto'} x${o.cantidad || 1}</span>
+                                            <span class="text-teal-800">$${Number(o.totalCliente || o.subtotal || 0).toLocaleString('es-AR')}</span>
                                         </div>
                                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-1 text-slate-600">
-                                            <div><b>Cliente:</b> ${o.cliente}</div>
-                                            <div><b>Dirección:</b> ${o.direccion}</div>
-                                            <div><b>Fecha:</b> ${new Date(o.fecha).toLocaleString()}</div>
-                                            <div><b>Envío Flash:</b> ${o.flash ? '<span class="text-amber-700 font-bold">SI (Comisión 10% + $2000)</span>' : 'No (Envío propio)'}</div>
+                                            <div><b>Cliente:</b> ${o.cliente || 'Anónimo'}</div>
+                                            <div><b>Dirección:</b> ${o.direccion || 'Tres Arroyos'}</div>
+                                            <div><b>Fecha:</b> ${o.fecha ? new Date(o.fecha).toLocaleString() : 'Reciente'}</div>
+                                            <div><b>Envío Flash:</b> ${(o.flash === true || o.flash === 'true' || o.flash === 'TRUE') ? '<span class="text-amber-700 font-bold">SI (Comisión 10% + $2000)</span>' : 'No (Envío propio)'}</div>
                                         </div>
                                         ${o.nota ? `<div class="bg-white p-2 rounded-xl border border-slate-200 text-slate-700"><b>Nota:</b> ${o.nota}</div>` : ''}
                                     </div>
@@ -936,15 +950,15 @@
                 `;
             }
 
-            const totalTiendas = state.users.length;
-            const totalProductos = state.products.length;
-            const totalPedidos = state.orders.length;
+            const totalTiendas = state.tiendas.length;
+            const totalProductos = state.productos.length;
+            const totalPedidos = state.pedidos.length;
             
             let totalComisiones10 = 0;
             let totalEnvios2000 = 0;
-            state.orders.forEach(o => {
-                if(o.flash) {
-                    totalComisiones10 += (Number(o.subtotal) || 0) * 0.10;
+            state.pedidos.forEach(o => {
+                if(o.flash === true || o.flash === 'true' || o.flash === 'TRUE') {
+                    totalComisiones10 += (Number(o.subtotal) || Number(o.totalCliente) || 0) * 0.10;
                     totalEnvios2000 += 2000;
                 }
             });
@@ -1011,19 +1025,19 @@
                                         </tr>
                                     </thead>
                                     <tbody class="divide-y divide-slate-100">
-                                        ${state.orders.map(o => `
+                                        ${state.pedidos.map(o => `
                                             <tr class="hover:bg-slate-50">
-                                                <td class="p-3 text-slate-500">${new Date(o.fecha).toLocaleDateString()}</td>
-                                                <td class="p-3 font-semibold text-slate-800">${o.cliente}</td>
+                                                <td class="p-3 text-slate-500">${o.fecha ? new Date(o.fecha).toLocaleDateString() : 'Reciente'}</td>
+                                                <td class="p-3 font-semibold text-slate-800">${o.cliente || 'Anónimo'}</td>
                                                 <td class="p-3">
                                                     <b class="text-teal-800">${o.tiendaNombre || 'Local'}</b><br>
-                                                    <span class="text-slate-600">${o.productoNombre} x${o.cantidad}</span>
+                                                    <span class="text-slate-600">${o.productoNombre || 'Producto'} x${o.cantidad || 1}</span>
                                                 </td>
-                                                <td class="p-3 text-slate-600">${o.direccion}</td>
+                                                <td class="p-3 text-slate-600">${o.direccion || 'Tres Arroyos'}</td>
                                                 <td class="p-3">
-                                                    ${o.flash ? '<span class="bg-amber-100 text-amber-800 px-2 py-0.5 rounded-lg font-bold">SI ($2k + 10%)</span>' : '<span class="text-slate-500">No</span>'}
+                                                    ${(o.flash === true || o.flash === 'true' || o.flash === 'TRUE') ? '<span class="bg-amber-100 text-amber-800 px-2 py-0.5 rounded-lg font-bold">SI ($2k + 10%)</span>' : '<span class="text-slate-500">No</span>'}
                                                 </td>
-                                                <td class="p-3 font-extrabold text-slate-900">$${Number(o.totalCliente).toLocaleString('es-AR')}</td>
+                                                <td class="p-3 font-extrabold text-slate-900">$${Number(o.totalCliente || o.subtotal || 0).toLocaleString('es-AR')}</td>
                                             </tr>
                                         `).join('')}
                                     </tbody>
@@ -1120,10 +1134,16 @@
             }
 
             if (state.selectedProductModal) {
-                const p = state.products.find(prod => prod.id === state.selectedProductModal);
+                const p = state.productos.find(prod => prod.id === state.selectedProductModal);
                 if (p) {
-                    const vendor = state.users.find(u => u.email === p.vendorEmail) || {};
-                    const fotos = p.fotos && p.fotos.length > 0 ? p.fotos : ['https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500'];
+                    const vendor = state.tiendas.find(u => u.email === p.vendorEmail || u.slug === p.tiendaSlug) || {};
+                    let fotos = ['https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500'];
+                    try {
+                        if (p.fotos) {
+                            let parsed = typeof p.fotos === 'string' ? JSON.parse(p.fotos) : p.fotos;
+                            if (Array.isArray(parsed) && parsed.length > 0) fotos = parsed;
+                        }
+                    } catch(e) {}
                     const cId = 'modal_prod_carousel';
                     const subtotal = p.precio * state.checkoutData.cant;
                     const flashFee = state.checkoutData.flash ? 2000 : 0;
@@ -1142,7 +1162,7 @@
                                     `).join('')}
                                     ${fotos.length > 1 ? `
                                         <div class="absolute bottom-2 left-0 right-0 flex justify-center gap-1.5 z-10">
-                                            ${fotos.map((_, i) => `<span class="carousel-dot w-1.5 h-1.5 rounded-full ${i===0?'bg-white':'bg-white/50'}"></span>`).join('')}
+                                            ${fotos.map((_, i) => `<span class="carousel-dot w-2 h-2 rounded-full ${i===0?'bg-white':'bg-white/50'}"></span>`).join('')}
                                         </div>
                                     ` : ''}
                                     <span class="absolute top-3 left-3 bg-teal-900/80 text-white text-xs px-2.5 py-1 rounded-xl font-medium">${p.categoria}</span>
@@ -1199,7 +1219,7 @@
             }
 
             if (state.editStoreModalOpen) {
-                const v = state.users.find(u => u.email === state.session.email);
+                const v = state.tiendas.find(u => u.email === state.session.email || u.dueño === state.session.email);
                 modalsHtml += `
                     <div class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
                         <div class="bg-white rounded-3xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 shadow-2xl space-y-4 relative modal-box">
@@ -1275,9 +1295,14 @@
             }
 
             if (state.editCatalogModalOpen) {
-                const v = state.users.find(u => u.email === state.session.email);
-                const cat = v.catalogo || { titulo: 'Catálogo Verano', desc: 'Envíos en el día', bienvenida: '¡Bienvenidos!', color: '#0f766e', destacadosIds: [], mostrarInfo: 'Si' };
-                const myProducts = state.products.filter(p => p.vendorEmail === v.email);
+                const v = state.tiendas.find(u => u.email === state.session.email || u.dueño === state.session.email);
+                let cat = { titulo: 'Catálogo Verano', desc: 'Envíos en el día', bienvenida: '¡Bienvenidos!', color: '#0f766e', destacadosIds: [], mostrarInfo: 'Si' };
+                try {
+                    if (v.catalogo) {
+                        cat = typeof v.catalogo === 'string' ? JSON.parse(v.catalogo) : v.catalogo;
+                    }
+                } catch(e) {}
+                const myProducts = state.productos.filter(p => p.vendorEmail === v.email || p.tiendaSlug === v.slug);
 
                 modalsHtml += `
                     <div class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
@@ -1333,7 +1358,7 @@
             }
 
             if (state.editProductModal) {
-                const p = state.products.find(prod => prod.id === state.editProductModal);
+                const p = state.productos.find(prod => prod.id === state.editProductModal);
                 if (p) {
                     modalsHtml += `
                         <div class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
@@ -1362,7 +1387,7 @@
                                         <textarea name="descripcion" rows="2" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-sm mt-1">${p.descripcion || ''}</textarea>
                                     </div>
                                     <div>
-                                        <label class="text-xs font-semibold text-slate-700">Nuevas Fotos (Reemplaza las anteriores, hasta 4)</label>
+                                        <label class="text-xs font-semibold text-slate-700">Nuevas Fotos (Reemplaza las anteriores, hasta 6)</label>
                                         <input type="file" name="fotos" accept="image/*" multiple class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-3 py-2 text-xs">
                                     </div>
                                     <button type="submit" class="w-full h-12 bg-teal-700 hover:bg-teal-800 text-white font-bold rounded-2xl shadow transition text-sm">Guardar Cambios</button>
@@ -1377,7 +1402,7 @@
         }
 
         // ==========================================
-        // 6. CONTROLLERS WITH ROBUST TRY/CATCH & PRE-COMPRESSION
+        // 6. CONTROLLERS WITH SHEETS PERSISTENCE
         // ==========================================
         function openAuthModal(tab = 'login') {
             state.authModalOpen = true;
@@ -1390,7 +1415,7 @@
             try {
                 const fd = new FormData(e.target);
                 const email = fd.get('email').trim();
-                if (state.users.some(u => u.email === email)) {
+                if (state.usuarios.some(u => u.email === email || u.dueño === email)) {
                     showToast("El email ya está registrado", "error");
                     return;
                 }
@@ -1398,8 +1423,8 @@
                 const nombreTienda = fd.get('nombreTienda');
                 const slug = nombreTienda.toLowerCase().replace(/[^a-z0-9]/g, '-') + '-' + Math.random().toString(36).substring(2, 6);
 
-                const newUser = {
-                    id: 'user_' + Date.now(),
+                const newTienda = {
+                    id: 'usr_' + Date.now(),
                     nombreTienda,
                     dueño: fd.get('dueño'),
                     email,
@@ -1412,17 +1437,22 @@
                     facebookUrl: '',
                     webUrl: '',
                     fotoPerfil: '',
-                    fotosCarrusel: [],
-                    catalogo: { titulo: 'Catálogo ' + nombreTienda, desc: 'Envíos en el día en Tres Arroyos', bienvenida: '¡Gracias por elegirnos!', color: '#0f766e', destacadosIds: [], mostrarInfo: 'Si' }
+                    fotosCarrusel: JSON.stringify([]),
+                    catalogo: JSON.stringify({ titulo: 'Catálogo ' + nombreTienda, desc: 'Envíos en el día en Tres Arroyos', bienvenida: '¡Gracias por elegirnos!', color: '#0f766e', destacadosIds: [], mostrarInfo: 'Si' })
                 };
 
-                state.users.push(newUser);
-                state.session = { email: newUser.email };
+                state.tiendas.push(newTienda);
+                state.session = { email: newTienda.email };
+                localStorage.setItem('ta_session', JSON.stringify(state.session));
                 state.authModalOpen = false;
-                saveLocal();
-                await syncWithSheets('register_user', newUser);
-                showToast("¡Tienda registrada con éxito!");
-                window.location.hash = '#t/' + slug;
+
+                postToSheets('registro', newTienda);
+                showToast("Guardado, actualizando...");
+                
+                setTimeout(() => {
+                    fetchAllFromSheets(false);
+                    window.location.hash = '#t/' + slug;
+                }, 2000);
             } catch (err) {
                 console.error("Error in handleRegister:", err);
                 showToast("Error al registrar tienda", "error");
@@ -1436,11 +1466,11 @@
                 const email = fd.get('email').trim();
                 const pass = fd.get('password');
 
-                const user = state.users.find(u => u.email === email && u.password === pass);
+                const user = state.tiendas.find(u => (u.email === email || u.dueño === email) && u.password === pass);
                 if (user) {
-                    state.session = { email: user.email };
+                    state.session = { email: user.email || user.dueño };
+                    localStorage.setItem('ta_session', JSON.stringify(state.session));
                     state.authModalOpen = false;
-                    saveLocal();
                     showToast("¡Sesión iniciada!");
                     window.location.hash = '#mi-tienda';
                 } else {
@@ -1454,7 +1484,7 @@
 
         function logout() {
             state.session = null;
-            saveLocal();
+            localStorage.removeItem('ta_session');
             showToast("Sesión cerrada");
             window.location.hash = '';
         }
@@ -1463,31 +1493,37 @@
             e.preventDefault();
             try {
                 const fd = new FormData(e.target);
+                const vendor = state.tiendas.find(u => u.email === state.session.email || u.dueño === state.session.email);
+                if (!vendor) return;
+
                 const fotosInput = document.getElementById('new-prod-fotos');
-                let fotos = [];
+                let fotosArr = [];
                 if (fotosInput && fotosInput.files.length > 0) {
-                    fotos = await compressMultiple(fotosInput.files, 4, 0.55);
+                    fotosArr = await compressMultiple(fotosInput.files, 6, 0.6);
                 }
 
                 const newProd = {
-                    id: 'prod_' + Math.random().toString(36).substring(2, 6),
-                    vendorEmail: state.session.email,
+                    id: 'prod_' + Math.random().toString(36).substring(2, 8),
+                    vendorEmail: vendor.email,
+                    tiendaSlug: vendor.slug,
                     nombre: fd.get('nombre'),
                     precio: Number(fd.get('precio')),
                     categoria: fd.get('categoria'),
                     descripcion: fd.get('descripcion'),
-                    stock: fd.get('stock') === 'Si',
-                    envioPropio: fd.get('envioPropio') === 'Si',
-                    fotos,
-                    activo: true
+                    stock: fd.get('stock') === 'Si' ? 'true' : 'false',
+                    envioPropio: fd.get('envioPropio') === 'Si' ? 'true' : 'false',
+                    fotos: JSON.stringify(fotosArr),
+                    activo: 'true'
                 };
 
-                state.products.push(newProd);
-                saveLocal();
-                await syncWithSheets('create_product', newProd);
-                showToast("Guardado ✓");
+                state.productos.push(newProd);
+                postToSheets('crear_producto', newProd);
+                showToast("Guardado, actualizando...");
                 e.target.reset();
-                render();
+
+                setTimeout(() => {
+                    fetchAllFromSheets(false);
+                }, 2000);
             } catch (err) {
                 console.error("Error creating product:", err);
                 showToast("Error al guardar producto", "error");
@@ -1495,22 +1531,22 @@
         }
 
         function toggleProductStatus(id) {
-            const p = state.products.find(prod => prod.id === id);
+            const p = state.productos.find(prod => prod.id === id);
             if (p) {
-                p.activo = p.activo === false ? true : false;
-                saveLocal();
-                syncWithSheets('update_product', p);
-                render();
+                const currentActive = p.activo !== false && p.activo !== 'false';
+                p.activo = !currentActive ? 'true' : 'false';
+                postToSheets('actualizar_producto', p);
+                showToast("Actualizando estado...");
+                setTimeout(() => fetchAllFromSheets(false), 1500);
             }
         }
 
         function deleteProduct(id) {
             if (confirm("¿Estás seguro de borrar este producto?")) {
-                state.products = state.products.filter(p => p.id !== id);
-                saveLocal();
-                syncWithSheets('delete_product', { id });
-                showToast("Producto eliminado");
-                render();
+                state.productos = state.productos.filter(p => p.id !== id);
+                postToSheets('borrar_producto', { id });
+                showToast("Eliminando producto...");
+                setTimeout(() => fetchAllFromSheets(false), 1500);
             }
         }
 
@@ -1523,7 +1559,7 @@
             e.preventDefault();
             try {
                 const fd = new FormData(e.target);
-                const p = state.products.find(prod => prod.id === id);
+                const p = state.productos.find(prod => prod.id === id);
                 if (!p) return;
 
                 p.nombre = fd.get('nombre');
@@ -1533,14 +1569,14 @@
 
                 const fotosInput = e.target.querySelector('input[type="file"]');
                 if (fotosInput && fotosInput.files.length > 0) {
-                    p.fotos = await compressMultiple(fotosInput.files, 4, 0.55);
+                    let fotosArr = await compressMultiple(fotosInput.files, 6, 0.6);
+                    p.fotos = JSON.stringify(fotosArr);
                 }
 
                 state.editProductModal = null;
-                saveLocal();
-                await syncWithSheets('update_product', p);
-                showToast("Guardado ✓");
-                render();
+                postToSheets('actualizar_producto', p);
+                showToast("Guardado, actualizando...");
+                setTimeout(() => fetchAllFromSheets(false), 2000);
             } catch (err) {
                 console.error("Error updating product:", err);
                 showToast("Error al actualizar producto", "error");
@@ -1556,7 +1592,7 @@
             e.preventDefault();
             try {
                 const fd = new FormData(e.target);
-                const v = state.users.find(u => u.email === state.session.email);
+                const v = state.tiendas.find(u => u.email === state.session.email || u.dueño === state.session.email);
                 if (!v) return;
 
                 v.nombreTienda = fd.get('nombreTienda');
@@ -1572,19 +1608,19 @@
 
                 const fotoPerfilInput = e.target.querySelector('input[name="fotoPerfil"]');
                 if (fotoPerfilInput && fotoPerfilInput.files.length > 0) {
-                    v.fotoPerfil = await compressImage(fotoPerfilInput.files[0], 500, 0.55);
+                    v.fotoPerfil = await compressImage(fotoPerfilInput.files[0], 500, 0.6);
                 }
 
                 const fotosCarruselInput = e.target.querySelector('input[name="fotosCarrusel"]');
                 if (fotosCarruselInput && fotosCarruselInput.files.length > 0) {
-                    v.fotosCarrusel = await compressMultiple(fotosCarruselInput.files, 6, 0.55);
+                    let car = await compressMultiple(fotosCarruselInput.files, 6, 0.6);
+                    v.fotosCarrusel = JSON.stringify(car);
                 }
 
                 state.editStoreModalOpen = false;
-                saveLocal();
-                await syncWithSheets('update_user', v);
-                showToast("Guardado ✓");
-                render();
+                postToSheets('actualizar_tienda', v);
+                showToast("Guardado, actualizando...");
+                setTimeout(() => fetchAllFromSheets(false), 2000);
             } catch (err) {
                 console.error("Error in handleSaveStore:", err);
                 showToast("Error al guardar tienda", "error");
@@ -1600,12 +1636,12 @@
             e.preventDefault();
             try {
                 const fd = new FormData(e.target);
-                const v = state.users.find(u => u.email === state.session.email);
+                const v = state.tiendas.find(u => u.email === state.session.email || u.dueño === state.session.email);
                 if (!v) return;
 
                 const destacadosIds = Array.from(e.target.querySelectorAll('input[name="destacado"]:checked')).map(cb => cb.value);
 
-                v.catalogo = {
+                let catObj = {
                     titulo: fd.get('titulo'),
                     desc: fd.get('desc'),
                     bienvenida: fd.get('bienvenida'),
@@ -1614,11 +1650,12 @@
                     destacadosIds
                 };
 
+                v.catalogo = JSON.stringify(catObj);
+
                 state.editCatalogModalOpen = false;
-                saveLocal();
-                await syncWithSheets('update_user', v);
-                showToast("Guardado ✓");
-                render();
+                postToSheets('actualizar_tienda', v);
+                showToast("Guardado, actualizando...");
+                setTimeout(() => fetchAllFromSheets(false), 2000);
             } catch (err) {
                 console.error("Error in handleSaveCatalog:", err);
                 showToast("Error al guardar catálogo", "error");
@@ -1633,8 +1670,8 @@
 
         async function enviarPedidoWhatsApp(productId) {
             try {
-                const p = state.products.find(prod => prod.id === productId);
-                const vendor = state.users.find(u => u.email === p.vendorEmail);
+                const p = state.productos.find(prod => prod.id === productId);
+                const vendor = state.tiendas.find(u => u.email === p.vendorEmail || u.slug === p.tiendaSlug);
                 if (!p || !vendor) return;
 
                 const cant = state.checkoutData.cant;
@@ -1668,13 +1705,12 @@
                     cliente,
                     direccion,
                     nota,
-                    flash,
+                    flash: flash ? 'true' : 'false',
                     fecha: new Date().toISOString()
                 };
 
-                state.orders.push(newOrder);
-                saveLocal();
-                await syncWithSheets('create_order', newOrder);
+                state.pedidos.push(newOrder);
+                postToSheets('crear_pedido', newOrder);
 
                 window.open(`https://wa.me/549${vendor.wsp}?text=${encodeURIComponent(mensaje)}`, '_blank');
 
@@ -1686,28 +1722,25 @@
 
                 state.selectedProductModal = null;
                 showToast("¡Pedido enviado por WhatsApp!");
-                render();
+                setTimeout(() => fetchAllFromSheets(false), 1500);
             } catch (err) {
                 console.error("Error in enviarPedidoWhatsApp:", err);
                 showToast("Error al procesar pedido", "error");
             }
         }
 
-        // --- REAL-TIME INIT & INTERVALS ---
+        // --- REAL-TIME INTERVAL (2 SECONDS) ---
         window.addEventListener('DOMContentLoaded', async () => {
-            await loadFromSheets();
+            await fetchAllFromSheets(false);
             handleRoute();
 
-            // Real-time polling every 8 seconds for stores/products/orders
-            setInterval(async () => {
-                let intervalTime = (state.consecutiveErrors >= 3) ? 30000 : 8000;
-                await loadFromSheets();
-            }, 8000);
+            setInterval(() => {
+                fetchAllFromSheets(true);
+            }, 2000);
 
-            // Visibility change trigger
             document.addEventListener('visibilitychange', async () => {
                 if (document.visibilityState === 'visible') {
-                    await loadFromSheets();
+                    await fetchAllFromSheets(false);
                 }
             });
         });
