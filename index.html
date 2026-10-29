@@ -107,7 +107,7 @@
         const SHEET_URL = "https://script.google.com/macros/s/AKfycbz6sUbdfJ23AOKNC0hwfGMWTeZ-9Ck4LpgeT4aEGmwm5SA3GVqtj-PGFBjx7PQh7ONWuA/exec";
         const CENTRAL_WSP = "5492983389710";
 
-        // 100% GOOGLE SHEETS STATE (Only ta_session in localStorage)
+        // STATE & FLAGS
         let state = {
             tiendas: [],
             productos: [],
@@ -129,6 +129,9 @@
             activeSlug: null,
             isLoading: true
         };
+
+        let isEditing = false;
+        let isFetching = false;
 
         const CATEGORIES = ['Todos', 'Alimentos', 'Servicios', 'Indumentaria', 'Hogar y Deco', 'Belleza', 'Oficios', 'Tecnología', 'Vehículos'];
         const ZONES_TRES_ARROYOS = ['Centro', 'Barrio Norte', 'Barrio Sur', 'Villa Italia', 'Villa Primavera', 'Quintas', 'Planta Urbana General'];
@@ -183,12 +186,15 @@
             }
         }
 
-        // --- FETCH MASTER FROM SHEETS ---
+        // --- FETCH MASTER FROM SHEETS WITH DEBOUNCE & EDIT LOCK ---
         async function fetchAllFromSheets(isBackground = false) {
+            if (isEditing) return;
+            if (isFetching) return;
             if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') && isBackground) {
                 return;
             }
 
+            isFetching = true;
             try {
                 const res = await fetch(`${SHEET_URL}?action=get_all`, { cache: 'no-store' });
                 const data = await res.json();
@@ -214,7 +220,7 @@
 
                     updateSyncBar(true);
 
-                    if (hasChanged && isBackground) {
+                    if (hasChanged && isBackground && !isEditing) {
                         showToast("Nueva actualización ↓");
                         render();
                     } else if (!isBackground) {
@@ -227,6 +233,8 @@
                 state.isLoading = false;
                 updateSyncBar(false);
                 if (!isBackground) render();
+            } finally {
+                isFetching = false;
             }
         }
 
@@ -310,7 +318,7 @@
             }, 3000);
         }
 
-        // --- ROBUST ROUTER SUPPORTING HASH AND SEARCH ---
+        // --- ROBUST ROUTER ---
         function handleRoute() {
             const searchParams = new URLSearchParams(window.location.search);
             const querySlug = searchParams.get('tienda') || searchParams.get('t');
@@ -321,7 +329,7 @@
                 hashSlug = hash.replace('#t/', '');
             } else if (hash.startsWith('#c/')) {
                 hashSlug = hash.replace('#c/', '');
-            } else if (hash.startsWith('#') && hash !== '#admin' && hash !== '#mi-tienda' && hash !== '#crear-tienda') {
+            } else if (hash.startsWith('#') && hash !== '#admin' && hash !== '#mi-tienda' && hash !== '#crear-tienda' && hash !== '#editar-tienda') {
                 hashSlug = hash.replace('#', '');
             }
 
@@ -330,15 +338,19 @@
             if (hash.startsWith('#admin') || window.location.pathname.includes('admin') || searchParams.has('admin')) {
                 state.currentView = 'admin';
                 state.activeSlug = null;
-            } else if (hash.startsWith('#mi-tienda') || hash.startsWith('#crear-tienda')) {
+                isEditing = false;
+            } else if (hash.startsWith('#mi-tienda') || hash.startsWith('#crear-tienda') || hash.startsWith('#editar-tienda')) {
                 state.currentView = 'mi-tienda';
                 state.activeSlug = null;
-            } else if (targetSlug && targetSlug !== 'mi-tienda' && targetSlug !== 'crear-tienda' && targetSlug !== 'admin') {
+                isEditing = true;
+            } else if (targetSlug && targetSlug !== 'mi-tienda' && targetSlug !== 'crear-tienda' && targetSlug !== 'editar-tienda' && targetSlug !== 'admin') {
                 state.currentView = 'tienda-publica';
                 state.activeSlug = targetSlug;
+                isEditing = false;
             } else {
                 state.currentView = 'catalogo';
                 state.activeSlug = null;
+                isEditing = false;
             }
             render();
         }
@@ -432,10 +444,7 @@
         // 1. GENERAL CATALOG & HEADER SESSION
         // ==========================================
         function renderGeneralCatalogView() {
-            const activeUser = state.session ? state.tiendas.find(u => (u.email && u.email.toLowerCase().trim() === state.session.email.toLowerCase().trim()) || (u.dueño && u.dueño.toLowerCase().trim() === state.session.email.toLowerCase().trim())) : null;
-            const primaryColor = activeUser && activeUser.catalogo && activeUser.catalogo.color ? activeUser.catalogo.color : '#0f766e';
-            document.documentElement.style.setProperty('--primary-color', primaryColor);
-
+            isEditing = false;
             let filteredProducts = state.productos.filter(p => p.activo !== false && p.activo !== 'false');
             if (state.activeCategory !== 'Todos') {
                 filteredProducts = filteredProducts.filter(p => p.categoria === state.activeCategory);
@@ -455,7 +464,7 @@
                             <div class="flex sm:hidden gap-2">
                                 ${state.session ? 
                                     `<a href="#mi-tienda" class="bg-teal-700 text-white text-xs px-3 py-2 rounded-xl font-medium">Mi Panel</a>` :
-                                    `<button onclick="openAuthModal('register')" class="bg-teal-700 text-white text-xs px-3 py-2 rounded-xl font-medium">Ingresar</button>`
+                                    `<button onclick="openAuthModal('login')" class="bg-teal-700 text-white text-xs px-3 py-2 rounded-xl font-medium">Ingresar</button>`
                                 }
                             </div>
                         </div>
@@ -564,6 +573,7 @@
         // 2. TIENDA PÚBLICA VIEW (#t/{slug})
         // ==========================================
         function renderTiendaPublicaView() {
+            isEditing = false;
             const vendor = state.tiendas.find(u => u.slug === state.activeSlug);
             if (!vendor) {
                 return `
@@ -727,10 +737,11 @@
         }
 
         // ==========================================
-        // 3. VENDOR PANEL (#mi-tienda)
+        // 3. VENDOR PANEL (#mi-tienda / #crear-tienda)
         // ==========================================
         function renderMiTiendaView() {
             if (!state.session) {
+                isEditing = false;
                 return `
                     <div class="max-w-md mx-auto px-4 py-20 text-center space-y-4">
                         <span class="text-5xl block">🔒</span>
@@ -750,12 +761,13 @@
             const sessionEmail = state.session.email.toLowerCase().trim();
             let vendor = state.tiendas.find(u => (u.email && u.email.toLowerCase().trim() === sessionEmail) || (u.dueño && u.dueño.toLowerCase().trim() === sessionEmail));
             
-            // If logged in user doesn't have a store yet, show creation form wizard
+            // If user doesn't have a store yet, set isEditing = true and render wizard
             if (!vendor) {
+                isEditing = true;
                 return `
                     <header class="bg-white shadow-sm sticky top-0 z-40 w-full">
                         <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
-                            <a href="#" class="text-teal-800 text-sm font-bold">← Volver al Market</a>
+                            <a href="#" onclick="isEditing=false;" class="text-teal-800 text-sm font-bold">← Volver al Market</a>
                             <button onclick="logout()" class="bg-rose-50 text-rose-700 text-xs px-3 py-2 rounded-xl font-bold">Cerrar Sesión</button>
                         </div>
                     </header>
@@ -775,6 +787,10 @@
                                     <label class="text-xs font-semibold text-slate-700">Dueño / Responsable</label>
                                     <input type="text" name="dueño" value="${state.session.nombre || ''}" required placeholder="Ej: Carlos Gómez" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm mt-1">
                                 </div>
+                                <div>
+                                    <label class="text-xs font-semibold text-slate-700">Descripción corta o rubro</label>
+                                    <textarea name="descripcion" rows="2" placeholder="Ej: Las mejores hamburguesas artesanales..." class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm mt-1"></textarea>
+                                </div>
                                 <div class="grid grid-cols-2 gap-3">
                                     <div>
                                         <label class="text-xs font-semibold text-slate-700">WhatsApp (Ej: 2983445566)</label>
@@ -787,12 +803,22 @@
                                         </select>
                                     </div>
                                 </div>
+                                <div class="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label class="text-xs font-semibold text-slate-700">Dirección</label>
+                                        <input type="text" name="direccion" placeholder="Ej: San Martín 450" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm mt-1">
+                                    </div>
+                                    <div>
+                                        <label class="text-xs font-semibold text-slate-700">¿Vehículo Propio?</label>
+                                        <select name="vehiculo" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm mt-1">
+                                            <option value="Si">Si</option>
+                                            <option value="No">No (Usaré servicio Flash)</option>
+                                        </select>
+                                    </div>
+                                </div>
                                 <div>
-                                    <label class="text-xs font-semibold text-slate-700">¿Vehículo Propio?</label>
-                                    <select name="vehiculo" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm mt-1">
-                                        <option value="Si">Si</option>
-                                        <option value="No">No (Usaré servicio Flash)</option>
-                                    </select>
+                                    <label class="text-xs font-semibold text-slate-700">Logo / Foto de Perfil (Opcional)</label>
+                                    <input type="file" name="fotoPerfil" accept="image/*" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-3 py-2 text-xs mt-1">
                                 </div>
                                 <button type="submit" class="w-full h-12 bg-teal-700 hover:bg-teal-800 text-white font-bold rounded-2xl shadow transition text-sm mt-2">Crear mi Tienda Ahora</button>
                             </form>
@@ -801,6 +827,7 @@
                 `;
             }
 
+            isEditing = false;
             const myProducts = state.productos.filter(p => (p.vendorEmail && p.vendorEmail.toLowerCase().trim() === sessionEmail) || (p.tiendaSlug && p.tiendaSlug === vendor.slug));
             const myOrders = state.pedidos.filter(o => (o.vendorEmail && o.vendorEmail.toLowerCase().trim() === sessionEmail) || (o.tiendaNombre && o.tiendaNombre.toLowerCase().trim() === vendor.nombreTienda.toLowerCase().trim()));
             const flashOrdersCount = myOrders.filter(o => o.flash === true || o.flash === 'true' || o.flash === 'TRUE').length;
@@ -973,6 +1000,7 @@
         // 4. ADMIN PANEL (#admin)
         // ==========================================
         function renderAdminView() {
+            isEditing = false;
             if (!state.adminAuthed) {
                 return `
                     <div class="max-w-md mx-auto px-4 py-24">
@@ -1249,12 +1277,13 @@
             }
 
             if (state.editStoreModalOpen) {
+                isEditing = true;
                 const sessionEmail = state.session ? state.session.email.toLowerCase().trim() : '';
                 const v = state.tiendas.find(u => (u.email && u.email.toLowerCase().trim() === sessionEmail) || (u.dueño && u.dueño.toLowerCase().trim() === sessionEmail)) || {};
                 modalsHtml += `
                     <div class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
                         <div class="bg-white rounded-3xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 shadow-2xl space-y-4 relative modal-box">
-                            <button onclick="state.editStoreModalOpen = false; render();" class="absolute top-4 right-4 text-slate-400 hover:text-slate-700 font-bold">✕</button>
+                            <button onclick="isEditing=false; state.editStoreModalOpen = false; render();" class="absolute top-4 right-4 text-slate-400 hover:text-slate-700 font-bold">✕</button>
                             <h2 class="text-lg font-extrabold text-slate-900">⚙️ Editar Ficha y Redes</h2>
                             <form id="edit-store-form" onsubmit="handleSaveStore(event)" class="space-y-3">
                                 <div>
@@ -1326,6 +1355,7 @@
             }
 
             if (state.editCatalogModalOpen) {
+                isEditing = true;
                 const sessionEmail = state.session ? state.session.email.toLowerCase().trim() : '';
                 const v = state.tiendas.find(u => (u.email && u.email.toLowerCase().trim() === sessionEmail) || (u.dueño && u.dueño.toLowerCase().trim() === sessionEmail)) || {};
                 let cat = { titulo: 'Catálogo Verano', desc: 'Envíos en el día', bienvenida: '¡Bienvenidos!', color: '#0f766e', destacadosIds: [], mostrarInfo: 'Si' };
@@ -1339,7 +1369,7 @@
                 modalsHtml += `
                     <div class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
                         <div class="bg-white rounded-3xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 shadow-2xl space-y-4 relative modal-box">
-                            <button onclick="state.editCatalogModalOpen = false; render();" class="absolute top-4 right-4 text-slate-400 hover:text-slate-700 font-bold">✕</button>
+                            <button onclick="isEditing=false; state.editCatalogModalOpen = false; render();" class="absolute top-4 right-4 text-slate-400 hover:text-slate-700 font-bold">✕</button>
                             <h2 class="text-lg font-extrabold text-slate-900">🎨 Configurar Catálogo y Destacados</h2>
                             <form onsubmit="handleSaveCatalog(event)" class="space-y-3">
                                 <div>
@@ -1390,12 +1420,13 @@
             }
 
             if (state.editProductModal) {
+                isEditing = true;
                 const p = state.productos.find(prod => prod.id === state.editProductModal);
                 if (p) {
                     modalsHtml += `
                         <div class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
                             <div class="bg-white rounded-3xl max-w-md w-full max-h-[90vh] overflow-y-auto p-6 shadow-2xl space-y-4 relative modal-box">
-                                <button onclick="state.editProductModal = null; render();" class="absolute top-4 right-4 text-slate-400 hover:text-slate-700 font-bold">✕</button>
+                                <button onclick="isEditing=false; state.editProductModal = null; render();" class="absolute top-4 right-4 text-slate-400 hover:text-slate-700 font-bold">✕</button>
                                 <h2 class="text-lg font-extrabold text-slate-900">✏️ Editar Producto</h2>
                                 <form onsubmit="handleUpdateProduct(event, '${p.id}')" class="space-y-3">
                                     <div>
@@ -1451,7 +1482,6 @@
                 const nombre = fd.get('nombre');
                 const wsp = fd.get('wsp');
 
-                // Check in usuarios sheet or tiendas sheet
                 const exists = (state.usuarios && state.usuarios.some(u => u.email && u.email.toLowerCase().trim() === email)) ||
                                (state.tiendas && state.tiendas.some(u => (u.email && u.email.toLowerCase().trim() === email) || (u.dueño && u.dueño.toLowerCase().trim() === email)));
                 
@@ -1498,10 +1528,6 @@
                 const email = fd.get('email').toLowerCase().trim();
                 const pass = fd.get('password');
 
-                console.log("Intentando login con:", email, pass);
-                console.log("Usuarios cargados en memoria:", state.usuarios);
-                console.log("Tiendas cargadas en memoria:", state.tiendas);
-
                 let foundUser = null;
                 if (state.usuarios && state.usuarios.length > 0) {
                     foundUser = state.usuarios.find(u => u.email && u.email.toLowerCase().trim() === email && (u.pass === pass || u.password === pass));
@@ -1518,7 +1544,6 @@
                     window.location.hash = '#mi-tienda';
                     render();
                 } else {
-                    console.warn("Datos incorrectos para email:", email);
                     showToast("Datos incorrectos, revisá email/pass", "error");
                 }
             } catch (err) {
@@ -1528,6 +1553,7 @@
         }
 
         function logout() {
+            isEditing = false;
             state.session = null;
             localStorage.removeItem('ta_session');
             showToast("Sesión cerrada");
@@ -1542,31 +1568,43 @@
                 const slug = nombreTienda.toLowerCase().replace(/[^a-z0-9]/g, '-') + '-' + Math.random().toString(36).substring(2, 6);
                 const email = state.session ? state.session.email : 'contacto@market.ar';
 
+                let fotoPerfilBase64 = '';
+                const fotoPerfilInput = e.target.querySelector('input[name="fotoPerfil"]');
+                if (fotoPerfilInput && fotoPerfilInput.files.length > 0) {
+                    fotoPerfilBase64 = await compressImage(fotoPerfilInput.files[0], 500, 0.6);
+                }
+
                 const newTienda = {
                     id: 'tienda_' + Date.now(),
+                    email,
+                    slug,
                     nombreTienda,
                     dueño: fd.get('dueño'),
-                    email,
+                    descripcion: fd.get('descripcion'),
+                    direccion: fd.get('direccion'),
+                    horario: 'Lunes a Sábados 9 a 20hs',
+                    fotos: JSON.stringify([fotoPerfilBase64 || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200']),
                     wsp: fd.get('wsp'),
+                    instagram: '',
+                    facebook: '',
+                    web: '',
                     zona: fd.get('zona'),
                     vehiculo: fd.get('vehiculo'),
-                    slug,
-                    instagramUrl: '',
-                    facebookUrl: '',
-                    webUrl: '',
-                    fotoPerfil: '',
+                    fotoPerfil: fotoPerfilBase64,
                     fotosCarrusel: JSON.stringify([]),
-                    catalogo: JSON.stringify({ titulo: 'Catálogo ' + nombreTienda, desc: 'Envíos en el día en Tres Arroyos', bienvenida: '¡Gracias por elegirnos!', color: '#0f766e', destacadosIds: [], mostrarInfo: 'Si' })
+                    catalogo: JSON.stringify({ titulo: 'Catálogo ' + nombreTienda, desc: 'Envíos en el día en Tres Arroyos', bienvenida: '¡Gracias por elegirnos!', color: '#0f766e', destacadosIds: [], mostrarInfo: 'Si' }),
+                    fecha: new Date().toISOString()
                 };
 
                 state.tiendas.push(newTienda);
                 postToSheets('crear_tienda', newTienda);
-                showToast("¡Tienda creada con éxito!");
+                isEditing = false;
+                showToast("Tienda guardada ✓");
                 
                 setTimeout(() => {
+                    window.location.hash = '#t/' + slug;
                     fetchAllFromSheets(false);
-                    render();
-                }, 1500);
+                }, 1000);
             } catch (err) {
                 console.error("Error creating store wizard:", err);
                 showToast("Error al crear tienda", "error");
@@ -1575,6 +1613,7 @@
 
         async function handleCreateProduct(e) {
             e.preventDefault();
+            isEditing = true;
             try {
                 const fd = new FormData(e.target);
                 const sessionEmail = state.session ? state.session.email.toLowerCase().trim() : '';
@@ -1605,12 +1644,14 @@
                 postToSheets('crear_producto', newProd);
                 showToast("Guardado, actualizando...");
                 e.target.reset();
+                isEditing = false;
 
                 setTimeout(() => {
                     fetchAllFromSheets(false);
                 }, 2000);
             } catch (err) {
                 console.error("Error creating product:", err);
+                isEditing = false;
                 showToast("Error al guardar producto", "error");
             }
         }
@@ -1636,12 +1677,14 @@
         }
 
         function openEditProductModal(id) {
+            isEditing = true;
             state.editProductModal = id;
             render();
         }
 
         async function handleUpdateProduct(e, id) {
             e.preventDefault();
+            isEditing = true;
             try {
                 const fd = new FormData(e.target);
                 const p = state.productos.find(prod => prod.id === id);
@@ -1659,22 +1702,26 @@
                 }
 
                 state.editProductModal = null;
+                isEditing = false;
                 postToSheets('actualizar_producto', p);
                 showToast("Guardado, actualizando...");
                 setTimeout(() => fetchAllFromSheets(false), 2000);
             } catch (err) {
                 console.error("Error updating product:", err);
+                isEditing = false;
                 showToast("Error al actualizar producto", "error");
             }
         }
 
         function openEditStoreModal() {
+            isEditing = true;
             state.editStoreModalOpen = true;
             render();
         }
 
         async function handleSaveStore(e) {
             e.preventDefault();
+            isEditing = true;
             try {
                 const fd = new FormData(e.target);
                 const sessionEmail = state.session ? state.session.email.toLowerCase().trim() : '';
@@ -1704,22 +1751,26 @@
                 }
 
                 state.editStoreModalOpen = false;
+                isEditing = false;
                 postToSheets('actualizar_tienda', v);
                 showToast("Guardado, actualizando...");
                 setTimeout(() => fetchAllFromSheets(false), 2000);
             } catch (err) {
                 console.error("Error in handleSaveStore:", err);
+                isEditing = false;
                 showToast("Error al guardar tienda", "error");
             }
         }
 
         function openEditCatalogModal() {
+            isEditing = true;
             state.editCatalogModalOpen = true;
             render();
         }
 
         async function handleSaveCatalog(e) {
             e.preventDefault();
+            isEditing = true;
             try {
                 const fd = new FormData(e.target);
                 const sessionEmail = state.session ? state.session.email.toLowerCase().trim() : '';
@@ -1740,11 +1791,13 @@
                 v.catalogo = JSON.stringify(catObj);
 
                 state.editCatalogModalOpen = false;
+                isEditing = false;
                 postToSheets('actualizar_tienda', v);
                 showToast("Guardado, actualizando...");
                 setTimeout(() => fetchAllFromSheets(false), 2000);
             } catch (err) {
                 console.error("Error in handleSaveCatalog:", err);
+                isEditing = false;
                 showToast("Error al guardar catálogo", "error");
             }
         }
@@ -1816,17 +1869,19 @@
             }
         }
 
-        // --- REAL-TIME INTERVAL (2 SECONDS) ---
+        // --- REAL-TIME INTERVAL (2 SECONDS PAUSED IF EDITING) ---
         window.addEventListener('DOMContentLoaded', async () => {
             await fetchAllFromSheets(false);
             handleRoute();
 
             setInterval(() => {
+                if (isEditing) return;
+                if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA')) return;
                 fetchAllFromSheets(true);
             }, 2000);
 
             document.addEventListener('visibilitychange', async () => {
-                if (document.visibilityState === 'visible') {
+                if (document.visibilityState === 'visible' && !isEditing) {
                     await fetchAllFromSheets(false);
                 }
             });
