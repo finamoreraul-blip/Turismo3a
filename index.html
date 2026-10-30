@@ -210,7 +210,6 @@
         window.allData = cachedData || { tiendas: [], productos: [], pedidos: [], usuarios: [] };
         window.session = state.session;
 
-        // Función de compresión automática de imágenes para evitar fallos de peso
         async function resizeImage(file, maxWidth = 1000, quality = 0.8) {
             return new Promise((resolve) => {
                 if (!file || typeof file === 'string') {
@@ -1958,35 +1957,38 @@
                 v.direccion = fd.get('direccion') || '';
                 v.zona = fd.get('zona');
                 v.wsp = fd.get('wsp');
-                v.instagramUrl = fd.get('instagramUrl') || v.instagramUrl || '';
-                v.facebookUrl = fd.get('facebookUrl') || v.facebookUrl || '';
-                v.webUrl = fd.get('webUrl') || v.webUrl || '';
+                v.instagramUrl = fd.get('instagramUrl') || v.instagram || '';
+                v.facebookUrl = fd.get('facebookUrl') || v.facebook || '';
+                v.webUrl = fd.get('webUrl') || v.web || '';
                 v.horario = fd.get('horario');
                 v.vehiculo = fd.get('vehiculo');
                 v.email = state.session ? state.session.email.toLowerCase().trim() : v.email;
 
                 showToast('Comprimiendo y subiendo imágenes...');
                 
+                // Mantener foto anterior si no se seleccionó una nueva
                 const fotoPerfilInput = e.target.querySelector('input[name="fotoPerfil"]');
                 if (fotoPerfilInput && fotoPerfilInput.files.length > 0) {
                     let uploadedPerfil = await uploadToImgBB(fotoPerfilInput.files[0]);
                     if (uploadedPerfil) {
                         v.fotoPerfil = uploadedPerfil;
                     }
-                } else if (!v.fotoPerfil) {
-                    v.fotoPerfil = '';
                 }
+                v.fotoPerfil = v.fotoPerfil || '';
 
+                // Mantener carrusel anterior si no se seleccionaron nuevas fotos
                 const fotosCarruselInput = e.target.querySelector('input[name="fotosCarrusel"]');
                 if (fotosCarruselInput && fotosCarruselInput.files.length > 0) {
                     let car = await uploadMultipleToImgBB(fotosCarruselInput.files, 6);
                     if (car.length > 0) {
                         v.fotosCarrusel = JSON.stringify(car);
                     }
-                } else if (!v.fotosCarrusel) {
-                    v.fotosCarrusel = JSON.stringify([]);
-                } else if (Array.isArray(v.fotosCarrusel)) {
-                    v.fotosCarrusel = JSON.stringify(v.fotosCarrusel);
+                } else {
+                    if (!v.fotosCarrusel) {
+                        v.fotosCarrusel = JSON.stringify([]);
+                    } else if (Array.isArray(v.fotosCarrusel)) {
+                        v.fotosCarrusel = JSON.stringify(v.fotosCarrusel);
+                    }
                 }
 
                 localStorage.setItem('ta_mi_tienda', JSON.stringify(v));
@@ -2094,4 +2096,4 @@
         });
     </script>
 </body>
-</html>
+    </html>
