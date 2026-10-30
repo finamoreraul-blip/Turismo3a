@@ -130,7 +130,7 @@
 
         let isEditing = false;
         let isFetching = false;
-        window.allData = null; // Almacén global de datos de Sheets para evitar rebotes
+        window.allData = null;
 
         const CATEGORIES = ['Todos', 'Alimentos', 'Servicios', 'Indumentaria', 'Hogar y Deco', 'Belleza', 'Oficios', 'Tecnología', 'Vehículos'];
         const ZONES_TRES_ARROYOS = ['Centro', 'Barrio Norte', 'Barrio Sur', 'Villa Italia', 'Villa Primavera', 'Quintas', 'Planta Urbana General'];
@@ -218,9 +218,8 @@
                     state.isOnline = true;
                     state.isLoading = false;
 
-                    // Sincronizar localStorage ta_mi_tienda si existe en las tiendas bajadas
                     if (state.session && state.session.email) {
-                        const found = newTiendas.find(t => t.email && t.email.toLowerCase().trim() === state.session.email.toLowerCase().trim());
+                        const found = [...newTiendas].reverse().find(t => t.email && t.email.toLowerCase().trim() === state.session.email.toLowerCase().trim());
                         if (found) {
                             localStorage.setItem('ta_mi_tienda', JSON.stringify(found));
                         }
@@ -420,6 +419,13 @@
             startCarousels();
         }
 
+        // --- RENDER TIENDA (ÚLTIMA CON EL SLUG) ---
+        function renderTienda(slug) {
+            state.activeSlug = slug;
+            state.currentView = 'tienda-publica';
+            render();
+        }
+
         // --- SOCIAL BUTTONS HELPER ---
         function renderSocialButtons(v) {
             let hasAny = v.instagramUrl || v.instagram || v.wsp || v.facebookUrl || v.facebook || v.webUrl || v.web;
@@ -552,7 +558,7 @@
                     ` : `
                         <div class="grid responsive-grid gap-4">
                             ${filteredProducts.map(p => {
-                                const vendor = state.tiendas.find(u => (u.email && u.email === p.vendorEmail) || (u.slug && u.slug === p.tiendaSlug)) || { nombreTienda: 'Local Local', slug: '#' };
+                                const vendor = [...state.tiendas].reverse().find(u => (u.email && u.email === p.vendorEmail) || (u.slug && u.slug === p.tiendaSlug)) || { nombreTienda: 'Local Local', slug: '#' };
                                 let fotos = ['https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500'];
                                 try {
                                     if (p.fotos) {
@@ -606,7 +612,8 @@
         // ==========================================
         function renderTiendaPublicaView() {
             isEditing = false;
-            const vendor = state.tiendas.find(u => u.slug === state.activeSlug);
+            // SOLUCIÓN 2: buscar la ÚLTIMA tienda con ese slug (reverse find)
+            const vendor = [...state.tiendas].reverse().find(u => u.slug === state.activeSlug);
             if (!vendor) {
                 return `
                     <div class="max-w-md mx-auto px-4 py-20 text-center space-y-4">
@@ -769,7 +776,7 @@
         }
 
         // ==========================================
-        // 3. MI PANEL VENDEDOR (#mi-panel) - SOLUCIÓN DEFINITIVA
+        // 3. MI PANEL VENDEDOR (#mi-panel)
         // ==========================================
         function renderMiPanel() {
             isEditing = false;
@@ -793,23 +800,20 @@
             const session = state.session;
             let miTienda = null;
 
-            // 1) Intentar desde localStorage primero (instantáneo)
             if(localStorage.ta_mi_tienda){
                 try {
                     miTienda = JSON.parse(localStorage.ta_mi_tienda);
                 } catch(e){}
             }
 
-            // 2) Si no, buscar en Sheets data.tiendas por email
             if(!miTienda && window.allData && window.allData.tiendas){
-                miTienda = window.allData.tiendas.find(t => t.email && t.email.toLowerCase() == session.email.toLowerCase());
+                miTienda = [...window.allData.tiendas].reverse().find(t => t.email && t.email.toLowerCase() == session.email.toLowerCase());
                 if(miTienda) localStorage.setItem('ta_mi_tienda', JSON.stringify(miTienda));
             } else if (!miTienda && state.tiendas && state.tiendas.length > 0) {
-                miTienda = state.tiendas.find(t => t.email && t.email.toLowerCase() == session.email.toLowerCase());
+                miTienda = [...state.tiendas].reverse().find(t => t.email && t.email.toLowerCase() == session.email.toLowerCase());
                 if(miTienda) localStorage.setItem('ta_mi_tienda', JSON.stringify(miTienda));
             }
 
-            // 3) Si aún no hay, PERO estamos esperando Sheets (allData aún null), NO REDIRIGIR. Mostrar "Cargando tu tienda..."
             if(!miTienda && !window.allData && state.isLoading){ 
                 return `
                     <div class="flex-1 flex items-center justify-center py-32 text-center">
@@ -821,7 +825,6 @@
                 `;
             }
 
-            // 4) Solo si allData ya cargó y confirmamos que no tiene tienda, ahí sí mostrar botón Crear (SIN AUTO-REDIRECTS)
             if(!miTienda) {
                 return `
                     <header class="bg-white shadow-sm sticky top-0 z-40 w-full">
@@ -841,7 +844,6 @@
                 `;
             }
 
-            // Panel Vendedor Completo
             const sessionName = session.nombre || miTienda.dueño || 'Emprendedor';
             const publicLink = `${window.location.origin}${window.location.pathname}#t/${miTienda.slug}`;
 
@@ -876,7 +878,7 @@
                             </div>
                         </a>
 
-                        <a href="#editar-tienda/${miTienda.slug}" class="bg-slate-900 hover:bg-slate-800 text-white p-6 rounded-3xl shadow transition flex flex-col justify-between gap-4 group">
+                        <a href="#editar-tienda" class="bg-slate-900 hover:bg-slate-800 text-white p-6 rounded-3xl shadow transition flex flex-col justify-between gap-4 group">
                             <span class="text-3xl">⚙️</span>
                             <div>
                                 <h3 class="text-lg font-bold">Editar tienda</h3>
@@ -1045,7 +1047,7 @@
                 try { v = JSON.parse(localStorage.ta_mi_tienda); } catch(e){}
             }
             if(!v) {
-                v = state.tiendas.find(t => (t.email && t.email.toLowerCase().trim() === sessionEmail) || (t.dueño && t.dueño.toLowerCase().trim() === sessionEmail)) || {};
+                v = [...state.tiendas].reverse().find(t => (t.email && t.email.toLowerCase().trim() === sessionEmail) || (t.dueño && t.dueño.toLowerCase().trim() === sessionEmail)) || {};
             }
 
             return `
@@ -1064,6 +1066,7 @@
                         </div>
 
                         <form onsubmit="handleSaveStore(event)" class="space-y-3">
+                            <input type="hidden" name="slug" value="${v.slug || ''}">
                             <div>
                                 <label class="text-xs font-semibold text-slate-700">Nombre de Tienda</label>
                                 <input type="text" name="nombreTienda" value="${v.nombreTienda || ''}" required class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-sm mt-1">
@@ -1146,7 +1149,7 @@
             let vendor = null;
             if(localStorage.ta_mi_tienda) { try{ vendor = JSON.parse(localStorage.ta_mi_tienda); }catch(e){} }
             if(!vendor) {
-                vendor = state.tiendas.find(t => (t.email && t.email.toLowerCase().trim() === sessionEmail) || (t.dueño && t.dueño.toLowerCase().trim() === sessionEmail));
+                vendor = [...state.tiendas].reverse().find(t => (t.email && t.email.toLowerCase().trim() === sessionEmail) || (t.dueño && t.dueño.toLowerCase().trim() === sessionEmail));
             }
             
             if (!vendor) {
@@ -1441,7 +1444,7 @@
             if (state.selectedProductModal) {
                 const p = state.productos.find(prod => prod.id === state.selectedProductModal);
                 if (p) {
-                    const vendor = state.tiendas.find(u => (u.email && u.email === p.vendorEmail) || (u.slug && u.slug === p.tiendaSlug)) || {};
+                    const vendor = [...state.tiendas].reverse().find(u => (u.email && u.email === p.vendorEmail) || (u.slug && u.slug === p.tiendaSlug)) || {};
                     let fotos = ['https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500'];
                     try {
                         if (p.fotos) {
@@ -1637,15 +1640,14 @@
                     foundUser = state.usuarios.find(u => u.email && u.email.toLowerCase().trim() === email && (u.pass === pass || u.password === pass));
                 }
                 if (!foundUser && state.tiendas && state.tiendas.length > 0) {
-                    foundUser = state.tiendas.find(u => ((u.email && u.email.toLowerCase().trim() === email) || (u.dueño && u.dueño.toLowerCase().trim() === email)) && (u.pass === pass || u.password === pass));
+                    foundUser = [...state.tiendas].reverse().find(u => ((u.email && u.email.toLowerCase().trim() === email) || (u.dueño && u.dueño.toLowerCase().trim() === email)) && (u.pass === pass || u.password === pass));
                 }
 
                 if (foundUser) {
                     state.session = { email: foundUser.email || foundUser.dueño, nombre: foundUser.nombre || foundUser.dueño || 'Usuario' };
                     localStorage.setItem('ta_session', JSON.stringify(state.session));
                     
-                    // Buscar si tiene tienda para guardar en ta_mi_tienda instantáneamente
-                    const tFound = state.tiendas.find(t => t.email && t.email.toLowerCase().trim() === state.session.email.toLowerCase().trim());
+                    const tFound = [...state.tiendas].reverse().find(t => t.email && t.email.toLowerCase().trim() === state.session.email.toLowerCase().trim());
                     if(tFound) localStorage.setItem('ta_mi_tienda', JSON.stringify(tFound));
 
                     state.authModalOpen = false;
@@ -1731,7 +1733,7 @@
                 let vendor = null;
                 if(localStorage.ta_mi_tienda) { try{ vendor = JSON.parse(localStorage.ta_mi_tienda); }catch(e){} }
                 if(!vendor) {
-                    vendor = state.tiendas.find(u => (u.email && u.email.toLowerCase().trim() === sessionEmail) || (u.dueño && u.dueño.toLowerCase().trim() === sessionEmail));
+                    vendor = [...state.tiendas].reverse().find(u => (u.email && u.email.toLowerCase().trim() === sessionEmail) || (u.dueño && u.dueño.toLowerCase().trim() === sessionEmail));
                 }
                 if (!vendor) return;
 
@@ -1837,7 +1839,7 @@
                 let v = null;
                 if(localStorage.ta_mi_tienda) { try{ v = JSON.parse(localStorage.ta_mi_tienda); }catch(e){} }
                 if(!v) {
-                    v = state.tiendas.find(u => (u.email && u.email.toLowerCase().trim() === sessionEmail) || (u.dueño && u.dueño.toLowerCase().trim() === sessionEmail));
+                    v = [...state.tiendas].reverse().find(u => (u.email && u.email.toLowerCase().trim() === sessionEmail) || (u.dueño && u.dueño.toLowerCase().trim() === sessionEmail));
                 }
                 if (!v) return;
 
@@ -1851,6 +1853,7 @@
                 v.webUrl = fd.get('webUrl');
                 v.horario = fd.get('horario');
                 v.vehiculo = fd.get('vehiculo');
+                v.email = sessionEmail;
 
                 const fotoPerfilInput = e.target.querySelector('input[name="fotoPerfil"]');
                 if (fotoPerfilInput && fotoPerfilInput.files.length > 0) {
@@ -1863,14 +1866,21 @@
                     v.fotosCarrusel = JSON.stringify(car);
                 }
 
+                // SOLUCIÓN 2 FRONT
                 localStorage.setItem('ta_mi_tienda', JSON.stringify(v));
+                if (window.allData && window.allData.tiendas) {
+                    window.allData.tiendas = window.allData.tiendas.map(t => t.slug === v.slug ? v : t);
+                }
+                state.tiendas = state.tiendas.map(t => t.slug === v.slug ? v : t);
+
+                postToSheets('editar_tienda', v);
+
                 isEditing = false;
-                postToSheets('actualizar_tienda', v);
-                showToast("Tienda guardada ✓");
+                showToast("Tienda actualizada ✓");
                 setTimeout(() => {
-                    window.location.hash = '#mi-panel';
-                    fetchAllFromSheets(false);
-                }, 1000);
+                    window.location.hash = '#t/' + v.slug;
+                    renderTienda(v.slug);
+                }, 800);
             } catch (err) {
                 console.error("Error in handleSaveStore:", err);
                 isEditing = false;
@@ -1887,7 +1897,7 @@
         async function enviarPedidoWhatsApp(productId) {
             try {
                 const p = state.productos.find(prod => prod.id === productId);
-                const vendor = state.tiendas.find(u => (u.email && u.email === p.vendorEmail) || (u.slug && u.slug === p.tiendaSlug));
+                const vendor = [...state.tiendas].reverse().find(u => (u.email && u.email === p.vendorEmail) || (u.slug && u.slug === p.tiendaSlug));
                 if (!p || !vendor) return;
 
                 const cant = state.checkoutData.cant;
