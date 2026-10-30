@@ -129,6 +129,7 @@
             let files = Array.from(fileList).slice(0, maxCount);
             let urls = [];
             for (let f of files) {
+                if (!f.type.startsWith('image/')) continue;
                 let url = await uploadImageToDrive(f);
                 if (url) urls.push(url);
             }
@@ -265,7 +266,6 @@
                 filtered = filtered.filter(p => p.nombre.toLowerCase().includes(q) || (p.descripcion && p.descripcion.toLowerCase().includes(q)));
             }
 
-            // Ordenar para que aparezcan primero los Flash si se desea, o mantener orden
             filtered.sort((a, b) => {
                 let aFlash = a.tieneFlash === true || a.tieneFlash === 'true' || a.tieneFlash === 'TRUE';
                 let bFlash = b.tieneFlash === true || b.tieneFlash === 'true' || b.tieneFlash === 'TRUE';
