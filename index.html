@@ -95,7 +95,7 @@
 
         window.allData = cachedData || { productos: [], pedidos: [], usuarios: [] };
 
-        // Normalización y conversión de imagen a JPG mediante Canvas para evitar errores de tipo MIME / HEIC
+        // Subida robusta de imágenes convertidas a JPG mediante Canvas (evita errores con HEIC o tipos vacíos)
         async function uploadImageToDrive(file) {
             if (!file) return '';
             if (typeof file === 'string') return file;
@@ -110,21 +110,17 @@
                             const canvas = document.createElement('canvas');
                             let width = img.width;
                             let height = img.height;
-                            
-                            const MAX_WIDTH = 1200;
-                            const MAX_HEIGHT = 1200;
+                            const MAX = 1000;
                             if (width > height) {
-                                if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
+                                if (width > MAX) { height *= MAX / width; width = MAX; }
                             } else {
-                                if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; }
+                                if (height > MAX) { width *= MAX / height; height = MAX; }
                             }
-                            
                             canvas.width = width;
                             canvas.height = height;
                             const ctx = canvas.getContext('2d');
                             ctx.drawImage(img, 0, 0, width, height);
-                            
-                            resolve(canvas.toDataURL('image/jpeg', 0.85));
+                            resolve(canvas.toDataURL('image/jpeg', 0.8));
                         };
                         img.onerror = () => resolve(e.target.result);
                     };
@@ -139,7 +135,7 @@
                     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
                     body: JSON.stringify({
                         action: 'uploadImage',
-                        name: (file.name ? file.name.split('.')[0] : 'foto') + '.jpg',
+                        name: 'producto_' + Date.now() + '.jpg',
                         base64: base64Clean,
                         type: 'image/jpeg'
                     })
