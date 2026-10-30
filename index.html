@@ -224,7 +224,6 @@
             if (typeof file === 'string') {
                 if (file.startsWith('http://') || file.startsWith('https://') || file.startsWith('data:')) {
                     if (file.startsWith('data:')) {
-                        // Convertir base64 a blob para subir limpio a ImgBB
                         try {
                             let arr = file.split(',');
                             let mime = arr[0].match(/:(.*?);/)[1];
@@ -234,10 +233,10 @@
                             while(n--) { u8arr[n] = bstr.charCodeAt(n); }
                             file = new Blob([u8arr], {type: mime});
                         } catch(e) {
-                            return file; // fallback si falla conversión
+                            return file;
                         }
                     } else {
-                        return file; // ya es URL externa
+                        return file;
                     }
                 } else {
                     return file;
@@ -375,19 +374,6 @@
         function manualSync() {
             showToast("Sincronizando con Sheets...");
             fetchData(true);
-        }
-
-        function postToSheets(action, payload) {
-            try {
-                fetch(SHEET_URL, {
-                    method: 'POST',
-                    mode: 'no-cors',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action, ...payload })
-                });
-            } catch (err) {
-                console.error("Error posting to sheets:", err);
-            }
         }
 
         let carouselIntervals = {};
@@ -1684,7 +1670,14 @@
                 localStorage.setItem('ta_session', JSON.stringify(state.session));
                 state.authModalOpen = false;
 
-                postToSheets('registro', newUser);
+                // CORRECCIÓN CLAVE: Enviar como URL-encoded x-www-form-urlencoded para que el doPost de Google Apps Script lo reciba íntegro en e.postData.contents
+                await fetch(SHEET_URL, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ action: 'registro', ...newUser })
+                });
+
                 showToast("Cuenta creada ✓");
 
                 setTimeout(() => { window.location.hash = '#crear-tienda'; render(); }, 500);
@@ -1829,21 +1822,35 @@
             }
         }
 
-        function toggleProductStatus(id) {
+        async function toggleProductStatus(id) {
             const p = state.productos.find(prod => prod.id === id);
             if (p) {
                 const currentActive = p.activo !== false && p.activo !== 'false';
                 p.activo = !currentActive ? 'true' : 'false';
-                postToSheets('actualizar_producto', p);
+                
+                await fetch(SHEET_URL, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ action: 'actualizar_producto', ...p })
+                });
+
                 showToast("Actualizando estado...");
                 setTimeout(() => fetchData(true), 1500);
             }
         }
 
-        function deleteProduct(id) {
+        async function deleteProduct(id) {
             if (confirm("¿Estás seguro de borrar este producto?")) {
                 state.productos = state.productos.filter(p => p.id !== id);
-                postToSheets('borrar_producto', { id });
+                
+                await fetch(SHEET_URL, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ action: 'borrar_producto', id })
+                });
+
                 showToast("Eliminando producto...");
                 setTimeout(() => fetchData(true), 1500);
             }
@@ -1887,15 +1894,16 @@
             }
         }
 
+        // --- SOLUCIÓN CRÍTICA: ENVÍO CON x-www-form-urlencoded PARA GOOGLE APPS SCRIPT ---
         async function guardarTienda(datos) {
             try {
                 let resp = await fetch(SHEET_URL, {
                     method: 'POST',
                     mode: 'no-cors',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(datos)
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams(datos)
                 });
-                console.log('Guardado Sheets enviado', resp);
+                console.log('Guardado Sheets enviado correctamente', resp);
                 
                 showToast('¡Guardado! Actualizando...');
                 await new Promise(r => setTimeout(r, 2000));
@@ -2021,7 +2029,13 @@
                 };
 
                 state.pedidos.push(newOrder);
-                postToSheets('crear_pedido', newOrder);
+                
+                await fetch(SHEET_URL, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams(newOrder)
+                });
 
                 window.open(`https://wa.me/549${vendor.wsp}?text=${encodeURIComponent(mensaje)}`, '_blank');
 
@@ -2062,3 +2076,4 @@
     </script>
 </body>
 </html>
+
