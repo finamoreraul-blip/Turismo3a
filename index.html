@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>TresaMarket | Marketplace Local</title>
-    <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -89,6 +88,7 @@
             checkoutData: { cant: 1, cliente: '', direccion: '', nota: '', flash: false },
             currentView: 'catalogo',
             activeLocalName: null,
+            isSubmitting: false,
             isLoading: !cachedData
         };
 
@@ -129,7 +129,7 @@
             let files = Array.from(fileList).slice(0, maxCount);
             let urls = [];
             for (let f of files) {
-                if (!f.type.startsWith('image/')) continue;
+                if (!f.type || !f.type.startsWith('image/')) continue;
                 let url = await uploadImageToDrive(f);
                 if (url) urls.push(url);
             }
@@ -375,14 +375,24 @@
                     </div>
                 </header>
                 <main class="max-w-4xl mx-auto px-4 py-6 flex-1 w-full space-y-6">
-                    <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 flex justify-between items-center">
-                        <div>
-                            <span class="text-xs bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full font-bold">● Vendedor Activo</span>
-                            <h1 class="text-2xl font-extrabold text-slate-900 mt-2">${state.session.nombre}</h1>
-                            <p class="text-xs text-teal-800 font-bold mt-0.5">Local: ${currentUser.nombreLocal || 'Sin configurar'}</p>
+                    <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 space-y-4">
+                        <span class="text-xs bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full font-bold">● Vendedor Activo</span>
+                        <h1 class="text-2xl font-extrabold text-slate-900">${state.session.nombre}</h1>
+                        
+                        <div class="bg-slate-50 border border-slate-200 p-4 rounded-2xl space-y-2">
+                            <h3 class="text-xs font-bold uppercase tracking-wider text-slate-500">🏪 Mi Emprendimiento</h3>
+                            <form onsubmit="handleSaveLocalName(event)" class="flex gap-2">
+                                <input type="text" name="nombreLocal" value="${currentUser.nombreLocal || ''}" required placeholder="Ej: Aura Beauty" class="bg-white border rounded-xl px-4 py-2.5 text-sm flex-1 focus:outline-none">
+                                <button type="submit" class="bg-teal-700 hover:bg-teal-800 text-white px-5 py-2.5 rounded-xl font-bold text-xs shadow transition">Guardar Local</button>
+                            </form>
+                            <p class="text-[11px] text-slate-500">Este es el nombre con el que tus productos aparecerán publicados en TresaMarket.</p>
                         </div>
-                        <a href="#mis-productos" class="bg-teal-700 text-white text-xs px-4 py-3 rounded-2xl font-bold shadow">📦 Administrar Productos</a>
+
+                        <div class="pt-2 flex justify-between items-center">
+                            <a href="#mis-productos" class="bg-teal-700 hover:bg-teal-800 text-white text-xs px-5 py-3 rounded-2xl font-bold shadow transition block text-center">📦 Administrar Mis Productos</a>
+                        </div>
                     </div>
+
                     <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 space-y-4">
                         <h3 class="text-base font-bold text-slate-900">📋 Pedidos Recibidos (${myOrders.length})</h3>
                         ${myOrders.length === 0 ? `<p class="text-xs text-slate-500">No hay pedidos aún.</p>` : myOrders.map(o => {
@@ -428,18 +438,6 @@
                     <div class="bg-white p-6 rounded-3xl shadow-sm border space-y-4">
                         <h2 class="text-lg font-bold">${editP ? '✏️ Editar Producto' : '➕ Agregar Producto (Hasta 4 fotos)'}</h2>
                         
-                        ${!currentUser.nombreLocal ? `
-                            <div class="bg-amber-50 border border-amber-200 p-4 rounded-2xl text-xs text-amber-900 space-y-2">
-                                <b>⚠️ Atención:</b> Primero configurá el nombre de tu local para poder publicar.
-                                <form onsubmit="handleSaveLocalName(event)" class="flex gap-2 mt-2">
-                                    <input type="text" name="nombreLocal" required placeholder="Ej: Aura Beauty" class="bg-white border rounded-xl px-3 py-2 text-xs flex-1">
-                                    <button type="submit" class="bg-amber-600 text-white px-4 py-2 rounded-xl font-bold">Guardar Local</button>
-                                </form>
-                            </div>
-                        ` : `
-                            <p class="text-xs text-teal-800 font-bold">Publicando como: <b>${currentUser.nombreLocal}</b></p>
-                        `}
-
                         <form onsubmit="handleSaveProduct(event)" class="space-y-3">
                             <input type="hidden" name="id" value="${editP ? editP.id : ''}">
                             <div><label class="text-xs font-semibold">Nombre del Producto</label><input type="text" name="nombre" value="${editP ? editP.nombre : ''}" required class="w-full bg-slate-50 border rounded-2xl px-4 py-2.5 text-sm mt-1"></div>
@@ -462,7 +460,7 @@
                             </div>
 
                             <div class="flex gap-2">
-                                <button type="submit" class="flex-1 h-12 bg-teal-700 text-white font-bold rounded-2xl text-sm">${editP ? 'Actualizar Producto' : 'Guardar y Publicar Producto'}</button>
+                                <button type="submit" id="btn-submit-prod" class="flex-1 h-12 bg-teal-700 text-white font-bold rounded-2xl text-sm transition">${editP ? 'Actualizar Producto' : 'Publicar Producto'}</button>
                                 ${editP ? `<button type="button" onclick="state.editingProduct=null;render();" class="bg-slate-200 px-4 rounded-2xl text-xs font-bold">Cancelar</button>` : ''}
                             </div>
                         </form>
@@ -503,10 +501,11 @@
 
             let u = state.usuarios.find(x => x.email === state.session.email) || {};
             u.nombreLocal = nombreLocal;
-            u.action = 'registro';
+            u.action = 'guardar_mi_local';
 
+            showToast("Guardando nombre de local...");
             await fetch(SCRIPT_URL, { method: 'POST', mode: 'no-cors', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: new URLSearchParams(u) });
-            showToast("Nombre de local guardado ✓");
+            showToast("Nombre de local guardado exitosamente ✓");
             setTimeout(() => fetchData(true), 1500);
         }
 
@@ -516,7 +515,8 @@
 
             let currentUser = state.usuarios.find(u => u.email === state.session.email) || {};
             if (!currentUser.nombreLocal) {
-                showToast("Primero configurá el nombre de tu local", "error");
+                showToast("Primero configurá el nombre de tu local en tu panel", "error");
+                window.location.hash = '#mi-panel';
                 return;
             }
 
@@ -533,45 +533,63 @@
                 return;
             }
 
-            let fotosArr = [];
             const filesInput = document.getElementById('prod-fotos-input');
-            
-            if (filesInput && filesInput.files.length > 0) {
-                showToast("Subiendo fotos a Google Drive...");
-                fotosArr = await uploadMultipleImages(filesInput.files, 4);
+            let fotosArr = [];
+
+            const btnSubmit = document.getElementById('btn-submit-prod');
+            if (btnSubmit) {
+                btnSubmit.disabled = true;
+                btnSubmit.innerText = "Subiendo...";
             }
 
-            if (state.editingProduct) {
-                fotosArr = fotosArr.length > 0 ? fotosArr : (typeof state.editingProduct.fotos === 'string' ? JSON.parse(state.editingProduct.fotos) : state.editingProduct.fotos);
+            try {
+                if (filesInput && filesInput.files.length > 0) {
+                    showToast("Subiendo fotos a Google Drive...");
+                    fotosArr = await uploadMultipleImages(filesInput.files, 4);
+                }
+
+                if (state.editingProduct) {
+                    let oldFotos = [];
+                    try {
+                        oldFotos = typeof state.editingProduct.fotos === 'string' ? JSON.parse(state.editingProduct.fotos) : state.editingProduct.fotos;
+                    } catch(e){}
+                    fotosArr = fotosArr.length > 0 ? fotosArr : oldFotos;
+                }
+
+                if (!fotosArr || fotosArr.length === 0) {
+                    showToast("Debes subir al menos 1 foto válida (image/*)", "error");
+                    if (btnSubmit) { btnSubmit.disabled = false; btnSubmit.innerText = "Publicar Producto"; }
+                    return;
+                }
+
+                const prod = {
+                    action: state.editingProduct ? 'actualizar_producto' : 'crear_producto',
+                    id: productId,
+                    vendorEmail: state.session.email,
+                    vendorNombre: state.session.nombre,
+                    vendorLocal: currentUser.nombreLocal,
+                    nombre,
+                    precio,
+                    categoria,
+                    descripcion,
+                    fotos: JSON.stringify(fotosArr),
+                    tieneFlash: tieneFlash ? 'true' : 'false',
+                    activo: 'true'
+                };
+
+                showToast("Guardando producto en TresaMarket...");
+                await fetch(SCRIPT_URL, { method: 'POST', mode: 'no-cors', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: new URLSearchParams(prod) });
+                
+                state.editingProduct = null;
+                showToast("¡Producto publicado con éxito!");
+                e.target.reset();
+                await fetchData(true);
+            } catch (err) {
+                console.error("Error al publicar:", err);
+                showToast("Error al publicar producto", "error");
+            } finally {
+                if (btnSubmit) { btnSubmit.disabled = false; btnSubmit.innerText = "Publicar Producto"; }
             }
-
-            if (!fotosArr || fotosArr.length === 0) {
-                showToast("Debes subir al menos 1 foto válida (image/*)", "error");
-                return;
-            }
-
-            const prod = {
-                action: state.editingProduct ? 'actualizar_producto' : 'crear_producto',
-                id: productId,
-                vendorEmail: state.session.email,
-                vendorNombre: state.session.nombre,
-                vendorLocal: currentUser.nombreLocal,
-                nombre,
-                precio,
-                categoria,
-                descripcion,
-                fotos: JSON.stringify(fotosArr),
-                tieneFlash: tieneFlash ? 'true' : 'false',
-                activo: 'true'
-            };
-
-            showToast("Guardando producto en TresaMarket...");
-            await fetch(SCRIPT_URL, { method: 'POST', mode: 'no-cors', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: new URLSearchParams(prod) });
-            
-            state.editingProduct = null;
-            showToast("¡Producto guardado exitosamente!");
-            e.target.reset();
-            setTimeout(() => fetchData(true), 1500);
         }
 
         function startEditProduct(id) {
