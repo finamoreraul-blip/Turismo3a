@@ -51,24 +51,88 @@
             -ms-overflow-style: none;
             scrollbar-width: none;
         }
+
+        /* MERCADO LIBRE STYLE GRID & CARDS (CON NUESTROS COLORES Y 2 COLUMNAS EN CELU) */
         @media (max-width: 768px) {
-            .responsive-grid {
-                grid-template-columns: 1fr !important;
-            }
-            .responsive-card {
-                margin: 4px 0;
+            .ml-responsive-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+                gap: 8px !important;
             }
         }
         @media (min-width: 769px) and (max-width: 1024px) {
-            .responsive-grid {
-                grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            .ml-responsive-grid {
+                grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+                gap: 12px !important;
             }
         }
         @media (min-width: 1025px) {
-            .responsive-grid {
-                grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+            .ml-responsive-grid {
+                grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+                gap: 16px !important;
             }
         }
+
+        .ml-product-card {
+            background: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            cursor: pointer;
+            transition: all 150ms ease-in-out;
+            border: 1px solid #f1f5f9;
+        }
+        .ml-product-card:hover {
+            box-shadow: 0 6px 20px rgba(0,0,0,0.12);
+            transform: translateY(-2px);
+        }
+        .ml-product-img-container {
+            width: 100%;
+            aspect-ratio: 1 / 1;
+            background: #f8fafc;
+            position: relative;
+            overflow: hidden;
+        }
+        .ml-product-img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .ml-product-info {
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            justify-content: space-between;
+        }
+        .ml-product-title {
+            font-size: 13px;
+            font-weight: 500;
+            color: #334155;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            line-height: 1.3;
+        }
+        .ml-product-price {
+            font-size: 16px;
+            font-weight: 700;
+            color: #0f766e;
+        }
+
+        /* SKELETON LOADER ANIMATION */
+        @keyframes pulse-fast {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .skeleton {
+            background: #e2e8f0;
+            animation: pulse-fast 1.2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+
         .store-carousel-img {
             height: 220px;
             object-fit: cover;
@@ -81,7 +145,7 @@
         }
     </style>
 </head>
-<body class="bg-bglight text-dark min-h-screen flex flex-col">
+<body class="bg-bglight text-dark min-h-screen flex flex-col transition-all duration-150">
 
     <!-- SYNC STATUS BAR -->
     <div id="sync-bar" class="bg-slate-800 text-white text-xs py-1 px-4 text-center flex justify-between items-center z-50">
@@ -90,11 +154,24 @@
     </div>
 
     <!-- MAIN APP CONTAINER -->
-    <div id="app" class="flex-1 flex flex-col w-full">
-        <div class="flex-1 flex items-center justify-center py-32 text-center">
-            <div class="space-y-3">
-                <span class="text-4xl animate-spin inline-block">⏳</span>
-                <p class="text-sm font-semibold text-slate-600">Cargando Tres Arroyos Market...</p>
+    <div id="app" class="flex-1 flex flex-col w-full transition-all duration-150">
+        <!-- SKELETON INITIAL LOAD -->
+        <div class="max-w-6xl mx-auto px-4 py-6 w-full">
+            <div class="h-44 bg-slate-200 rounded-3xl skeleton mb-6"></div>
+            <div class="flex gap-2 mb-6 overflow-x-auto no-scrollbar">
+                <div class="w-20 h-10 rounded-xl skeleton flex-shrink-0"></div>
+                <div class="w-24 h-10 rounded-xl skeleton flex-shrink-0"></div>
+                <div class="w-20 h-10 rounded-xl skeleton flex-shrink-0"></div>
+                <div class="w-28 h-10 rounded-xl skeleton flex-shrink-0"></div>
+            </div>
+            <div class="grid ml-responsive-grid gap-3">
+                ${[1,2,3,4,5,6].map(() => `
+                    <div class="bg-white rounded-xl p-3 shadow-sm border border-slate-100 space-y-3">
+                        <div class="w-full aspect-square skeleton rounded-lg"></div>
+                        <div class="h-4 skeleton rounded w-3/4"></div>
+                        <div class="h-5 skeleton rounded w-1/2"></div>
+                    </div>
+                `).join('')}
             </div>
         </div>
     </div>
@@ -107,12 +184,17 @@
         const SHEET_URL = "https://script.google.com/macros/s/AKfycbz6sUbdfJ23AOKNC0hwfGMWTeZ-9Ck4LpgeT4aEGmwm5SA3GVqtj-PGFBjx7PQh7ONWuA/exec";
         const CENTRAL_WSP = "5492983389710";
 
-        // STATE & FLAGS
+        // STATE & FLAGS (CARGAR CACHE INICIAL PRIMERO PARA VELOCIDAD TIPO ML)
+        let cachedData = null;
+        try {
+            cachedData = JSON.parse(localStorage.getItem('ta_market_cache') || 'null');
+        } catch(e){}
+
         let state = {
-            tiendas: [],
-            productos: [],
-            pedidos: [],
-            usuarios: [],
+            tiendas: cachedData ? cachedData.tiendas : [],
+            productos: cachedData ? cachedData.productos : [],
+            pedidos: cachedData ? cachedData.pedidos : [],
+            usuarios: cachedData ? cachedData.usuarios : [],
             session: JSON.parse(localStorage.getItem('ta_session') || 'null'),
             isOnline: true,
             activeCategory: 'Todos',
@@ -125,12 +207,12 @@
             adminAuthed: sessionStorage.getItem('ta_admin_auth') === 'true',
             currentView: 'catalogo',
             activeSlug: null,
-            isLoading: true
+            isLoading: !cachedData
         };
 
         let isEditing = false;
         let isFetching = false;
-        window.allData = null;
+        window.allData = cachedData;
 
         const CATEGORIES = ['Todos', 'Alimentos', 'Servicios', 'Indumentaria', 'Hogar y Deco', 'Belleza', 'Oficios', 'Tecnología', 'Vehículos'];
         const ZONES_TRES_ARROYOS = ['Centro', 'Barrio Norte', 'Barrio Sur', 'Villa Italia', 'Villa Primavera', 'Quintas', 'Planta Urbana General'];
@@ -138,14 +220,8 @@
         // --- COMPRESSION ---
         async function compressImage(file, maxWidth = 800, quality = 0.6) {
             return new Promise((resolve) => {
-                if (!file) {
-                    resolve('');
-                    return;
-                }
-                if (typeof file === 'string') {
-                    resolve(file);
-                    return;
-                }
+                if (!file) { resolve(''); return; }
+                if (typeof file === 'string') { resolve(file); return; }
                 const reader = new FileReader();
                 reader.readAsDataURL(file);
                 reader.onload = (event) => {
@@ -177,21 +253,18 @@
                 let files = Array.from(fileList).slice(0, maxCount);
                 let promises = files.map(f => compressImage(f, 800, quality));
                 let results = await Promise.all(promises);
-                let filtered = results.filter(r => r && r.length > 0);
-                return filtered;
+                return results.filter(r => r && r.length > 0);
             } catch (err) {
                 console.error("Error compressing images:", err);
                 return [];
             }
         }
 
-        // --- FETCH MASTER FROM SHEETS ---
+        // --- FETCH MASTER FROM SHEETS (CON CACHE PRIMERO Y SEGUNDO PLANO) ---
         async function fetchAllFromSheets(isBackground = false) {
             if (isEditing || location.hash.includes('crear-tienda') || location.hash.includes('editar-tienda')) return;
             if (isFetching) return;
-            if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') && isBackground) {
-                return;
-            }
+            if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') && isBackground) return;
 
             isFetching = true;
             try {
@@ -200,6 +273,8 @@
                 
                 if (data) {
                     window.allData = data;
+                    localStorage.setItem('ta_market_cache', JSON.stringify(data));
+
                     const newTiendas = data.tiendas || [];
                     const newProductos = data.productos || [];
                     const newPedidos = data.pedidos || [];
@@ -220,15 +295,12 @@
 
                     if (state.session && state.session.email) {
                         const found = [...newTiendas].reverse().find(t => t.email && t.email.toLowerCase().trim() === state.session.email.toLowerCase().trim());
-                        if (found) {
-                            localStorage.setItem('ta_mi_tienda', JSON.stringify(found));
-                        }
+                        if (found) localStorage.setItem('ta_mi_tienda', JSON.stringify(found));
                     }
 
                     updateSyncBar(true);
 
                     if (hasChanged && isBackground && !isEditing) {
-                        showToast("Nueva actualización ↓");
                         render();
                     } else if (!isBackground) {
                         render();
@@ -254,7 +326,7 @@
                 txt.innerHTML = "● En vivo (Sheets)";
             } else {
                 bar.className = "bg-amber-700 text-white text-xs py-1 px-4 text-center flex justify-between items-center z-50";
-                txt.innerHTML = "○ Sin conexión con Google Sheets";
+                txt.innerHTML = "○ Sin conexión con Google Sheets (Modo Caché)";
             }
         }
 
@@ -290,9 +362,7 @@
 
                 let currentIndex = 0;
                 const showSlide = (idx) => {
-                    slides.forEach((s, i) => {
-                        s.style.display = (i === idx) ? 'block' : 'none';
-                    });
+                    slides.forEach((s, i) => { s.style.display = (i === idx) ? 'block' : 'none'; });
                     dots.forEach((d, i) => {
                         d.className = (i === idx) 
                             ? 'carousel-dot w-2 h-2 rounded-full bg-white scale-110 transition-all' 
@@ -301,7 +371,6 @@
                 };
 
                 showSlide(0);
-
                 carouselIntervals[id] = setInterval(() => {
                     currentIndex = (currentIndex + 1) % slides.length;
                     showSlide(currentIndex);
@@ -385,12 +454,23 @@
             const app = document.getElementById('app');
             if (!app) return;
 
-            if (state.isLoading && state.currentView !== 'mi-panel' && state.currentView !== 'editar-tienda' && !localStorage.getItem('ta_mi_tienda')) {
+            if (state.isLoading && state.currentView !== 'mi-panel' && state.currentView !== 'editar-tienda' && !localStorage.getItem('ta_mi_tienda') && state.tiendas.length === 0) {
                 app.innerHTML = `
-                    <div class="flex-1 flex items-center justify-center py-32 text-center">
-                        <div class="space-y-3">
-                            <span class="text-4xl animate-spin inline-block">⏳</span>
-                            <p class="text-sm font-semibold text-slate-600">Cargando datos desde Google Sheets...</p>
+                    <div class="max-w-6xl mx-auto px-4 py-6 w-full">
+                        <div class="h-44 bg-slate-200 rounded-3xl skeleton mb-6"></div>
+                        <div class="flex gap-2 mb-6 overflow-x-auto no-scrollbar">
+                            <div class="w-20 h-10 rounded-xl skeleton flex-shrink-0"></div>
+                            <div class="w-24 h-10 rounded-xl skeleton flex-shrink-0"></div>
+                            <div class="w-20 h-10 rounded-xl skeleton flex-shrink-0"></div>
+                        </div>
+                        <div class="grid ml-responsive-grid gap-3">
+                            ${[1,2,3,4,5,6].map(() => `
+                                <div class="bg-white rounded-xl p-3 shadow-sm border border-slate-100 space-y-3">
+                                    <div class="w-full aspect-square skeleton rounded-lg"></div>
+                                    <div class="h-4 skeleton rounded w-3/4"></div>
+                                    <div class="h-5 skeleton rounded w-1/2"></div>
+                                </div>
+                            `).join('')}
                         </div>
                     </div>
                 `;
@@ -419,14 +499,12 @@
             startCarousels();
         }
 
-        // --- RENDER TIENDA (ÚLTIMA CON EL SLUG) ---
         function renderTienda(slug) {
             state.activeSlug = slug;
             state.currentView = 'tienda-publica';
             render();
         }
 
-        // --- SOCIAL BUTTONS HELPER ---
         function renderSocialButtons(v) {
             let hasAny = v.instagramUrl || v.instagram || v.wsp || v.facebookUrl || v.facebook || v.webUrl || v.web;
             if (!hasAny) return '';
@@ -443,7 +521,6 @@
                     </a>
                 `;
             }
-
             if (v.wsp) {
                 buttonsHtml += `
                     <a href="https://wa.me/549${v.wsp}?text=${encodeURIComponent('Hola ' + v.nombreTienda + ', vi tu tienda en Tres Arroyos Market.')}" target="_blank" style="height: 48px; border-radius: 14px; background-color: #25D366;" class="text-white font-semibold text-xs flex items-center justify-center gap-2 shadow-sm hover:opacity-95 transition">
@@ -451,7 +528,6 @@
                     </a>
                 `;
             }
-
             if (fb) {
                 buttonsHtml += `
                     <a href="${fb}" target="_blank" style="height: 48px; border-radius: 14px; background-color: #1877F2;" class="text-white font-semibold text-xs flex items-center justify-center gap-2 shadow-sm hover:opacity-95 transition">
@@ -459,7 +535,6 @@
                     </a>
                 `;
             }
-
             if (wb) {
                 buttonsHtml += `
                     <a href="${wb}" target="_blank" style="height: 48px; border-radius: 14px; background-color: #111111;" class="text-white font-semibold text-xs flex items-center justify-center gap-2 shadow-sm hover:opacity-95 transition">
@@ -556,7 +631,7 @@
                             <p class="text-slate-500 text-sm mt-1">Probá cambiando de categoría o buscando otro término.</p>
                         </div>
                     ` : `
-                        <div class="grid responsive-grid gap-4">
+                        <div class="grid ml-responsive-grid">
                             ${filteredProducts.map(p => {
                                 const vendor = [...state.tiendas].reverse().find(u => (u.email && u.email === p.vendorEmail) || (u.slug && u.slug === p.tiendaSlug)) || { nombreTienda: 'Local Local', slug: '#' };
                                 let fotos = ['https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500'];
@@ -568,11 +643,11 @@
                                 } catch(e) {}
                                 const cId = 'prod_card_' + p.id;
                                 return `
-                                    <div onclick="openProductModal('${p.id}')" class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col cursor-pointer hover:shadow-md transition responsive-card">
-                                        <div class="relative h-40 bg-slate-100 carousel-container overflow-hidden" data-carousel-id="${cId}">
+                                    <div onclick="openProductModal('${p.id}')" class="ml-product-card">
+                                        <div class="ml-product-img-container carousel-container overflow-hidden" data-carousel-id="${cId}">
                                             ${fotos.map((f, i) => `
                                                 <div class="carousel-slide w-full h-full" style="display: ${i===0?'block':'none'}">
-                                                    <img src="${f}" alt="${p.nombre}" class="w-full h-full object-cover">
+                                                    <img src="${f}" alt="${p.nombre}" loading="lazy" class="ml-product-img">
                                                 </div>
                                             `).join('')}
                                             ${fotos.length > 1 ? `
@@ -582,15 +657,14 @@
                                             ` : ''}
                                             <span class="absolute top-2 left-2 bg-teal-900/80 text-white text-[10px] px-2 py-0.5 rounded-lg font-medium">${p.categoria}</span>
                                         </div>
-                                        <div class="p-3 flex flex-col flex-1 justify-between">
+                                        <div class="ml-product-info">
                                             <div>
                                                 <span class="text-[11px] text-teal-700 font-semibold block truncate">${vendor.nombreTienda || 'Comercio Local'}</span>
-                                                <h3 class="text-sm font-bold text-slate-800 line-clamp-1">${p.nombre}</h3>
-                                                <p class="text-xs text-slate-500 line-clamp-1 mt-0.5">${p.descripcion || ''}</p>
+                                                <h3 class="ml-product-title mt-0.5">${p.nombre}</h3>
                                             </div>
-                                            <div class="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between">
-                                                <span class="text-base font-extrabold text-slate-900">$${Number(p.precio).toLocaleString('es-AR')}</span>
-                                                <span class="text-xs bg-teal-50 text-teal-800 px-2 py-1 rounded-xl font-medium">Ver más</span>
+                                            <div class="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between">
+                                                <span class="ml-product-price">$${Number(p.precio).toLocaleString('es-AR')}</span>
+                                                <span class="text-xs bg-teal-50 text-teal-800 px-2.5 py-1 rounded-xl font-semibold">Ver</span>
                                             </div>
                                         </div>
                                     </div>
@@ -612,7 +686,6 @@
         // ==========================================
         function renderTiendaPublicaView() {
             isEditing = false;
-            // SOLUCIÓN 2: buscar la ÚLTIMA tienda con ese slug (reverse find)
             const vendor = [...state.tiendas].reverse().find(u => u.slug === state.activeSlug);
             if (!vendor) {
                 return `
@@ -627,9 +700,7 @@
 
             let catalogoConfig = { titulo: 'Catálogo de Productos', desc: '¡Bienvenidos a nuestra tienda online!', bienvenida: '¡Gracias por apoyar el comercio local!', mostrarInfo: 'Si', destacadosIds: [] };
             try {
-                if (vendor.catalogo) {
-                    catalogoConfig = typeof vendor.catalogo === 'string' ? JSON.parse(vendor.catalogo) : vendor.catalogo;
-                }
+                if (vendor.catalogo) catalogoConfig = typeof vendor.catalogo === 'string' ? JSON.parse(vendor.catalogo) : vendor.catalogo;
             } catch(e) {}
 
             const primaryColor = catalogoConfig.color || '#0f766e';
@@ -664,7 +735,7 @@
                     <div class="relative rounded-3xl overflow-hidden bg-slate-200 shadow-sm carousel-container" data-carousel-id="store_banner">
                         ${bannerFotos.map((f, i) => `
                             <div class="carousel-slide w-full h-full" style="display: ${i===0?'block':'none'}">
-                                <img src="${f}" class="store-carousel-img">
+                                <img src="${f}" loading="lazy" class="store-carousel-img">
                             </div>
                         `).join('')}
                         ${bannerFotos.length > 1 ? `
@@ -675,7 +746,7 @@
                         <div class="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent"></div>
                         
                         <div class="absolute bottom-4 left-4 flex items-center gap-4 z-20">
-                            <img src="${vendor.fotoPerfil || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200'}" class="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl object-cover border-2 border-white shadow-lg bg-white">
+                            <img src="${vendor.fotoPerfil || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200'}" loading="lazy" class="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl object-cover border-2 border-white shadow-lg bg-white">
                             <div class="text-white drop-shadow">
                                 <h1 class="text-xl sm:text-2xl font-extrabold">${vendor.nombreTienda}</h1>
                                 <p class="text-xs text-teal-100 flex items-center gap-1">📍 ${vendor.zona || 'Tres Arroyos'} ${vendor.vehiculo === 'Si' ? '• 🚚 Con envío propio' : '• ⚡ Envío por Flash'}</p>
@@ -708,7 +779,7 @@
                     ${destacadosProds.length > 0 ? `
                         <div class="space-y-3">
                             <h3 class="text-sm font-bold text-teal-800 uppercase tracking-wider">⭐ Destacados</h3>
-                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <div class="grid ml-responsive-grid">
                                 ${destacadosProds.map(p => renderProductCard(p, true)).join('')}
                             </div>
                         </div>
@@ -721,7 +792,7 @@
                                 <p class="text-slate-500 text-sm">Este local todavía no cargó productos activos.</p>
                             </div>
                         ` : `
-                            <div class="grid responsive-grid gap-4">
+                            <div class="grid ml-responsive-grid">
                                 ${restoProds.map(p => renderProductCard(p, false)).join('')}
                             </div>
                         `}
@@ -747,11 +818,11 @@
             } catch(e) {}
             const cId = 'prod_card_pub_' + p.id;
             return `
-                <div onclick="openProductModal('${p.id}')" class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col cursor-pointer hover:shadow-md transition ${isFeatured ? 'ring-2 ring-teal-600/30' : ''} responsive-card">
-                    <div class="relative ${isFeatured ? 'h-48' : 'h-40'} bg-slate-100 carousel-container overflow-hidden" data-carousel-id="${cId}">
+                <div onclick="openProductModal('${p.id}')" class="ml-product-card ${isFeatured ? 'ring-2 ring-teal-600/30' : ''}">
+                    <div class="ml-product-img-container carousel-container overflow-hidden" data-carousel-id="${cId}">
                         ${fotos.map((f, i) => `
                             <div class="carousel-slide w-full h-full" style="display: ${i===0?'block':'none'}">
-                                <img src="${f}" class="w-full h-full object-cover">
+                                <img src="${f}" loading="lazy" class="ml-product-img">
                             </div>
                         `).join('')}
                         ${fotos.length > 1 ? `
@@ -761,14 +832,13 @@
                         ` : ''}
                         <span class="absolute top-2 left-2 bg-teal-900/80 text-white text-[10px] px-2 py-0.5 rounded-lg font-medium">${p.categoria}</span>
                     </div>
-                    <div class="p-3 flex flex-col flex-1 justify-between">
+                    <div class="ml-product-info">
                         <div>
-                            <h4 class="text-sm font-bold text-slate-800 line-clamp-1">${p.nombre}</h4>
-                            <p class="text-xs text-slate-500 line-clamp-1 mt-0.5">${p.descripcion || ''}</p>
+                            <h4 class="ml-product-title">${p.nombre}</h4>
                         </div>
-                        <div class="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between">
-                            <span class="text-base font-extrabold text-slate-900">$${Number(p.precio).toLocaleString('es-AR')}</span>
-                            <span class="text-xs bg-teal-50 text-teal-800 px-2.5 py-1 rounded-xl font-medium">Comprar</span>
+                        <div class="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between">
+                            <span class="ml-product-price">$${Number(p.precio).toLocaleString('es-AR')}</span>
+                            <span class="text-xs bg-teal-50 text-teal-800 px-2.5 py-1 rounded-xl font-semibold">Comprar</span>
                         </div>
                     </div>
                 </div>
@@ -799,30 +869,10 @@
 
             const session = state.session;
             let miTienda = null;
-
-            if(localStorage.ta_mi_tienda){
-                try {
-                    miTienda = JSON.parse(localStorage.ta_mi_tienda);
-                } catch(e){}
-            }
-
-            if(!miTienda && window.allData && window.allData.tiendas){
-                miTienda = [...window.allData.tiendas].reverse().find(t => t.email && t.email.toLowerCase() == session.email.toLowerCase());
-                if(miTienda) localStorage.setItem('ta_mi_tienda', JSON.stringify(miTienda));
-            } else if (!miTienda && state.tiendas && state.tiendas.length > 0) {
+            if(localStorage.ta_mi_tienda){ try { miTienda = JSON.parse(localStorage.ta_mi_tienda); } catch(e){} }
+            if(!miTienda && state.tiendas && state.tiendas.length > 0) {
                 miTienda = [...state.tiendas].reverse().find(t => t.email && t.email.toLowerCase() == session.email.toLowerCase());
                 if(miTienda) localStorage.setItem('ta_mi_tienda', JSON.stringify(miTienda));
-            }
-
-            if(!miTienda && !window.allData && state.isLoading){ 
-                return `
-                    <div class="flex-1 flex items-center justify-center py-32 text-center">
-                        <div class="space-y-3">
-                            <span class="text-4xl animate-spin inline-block">⏳</span>
-                            <p class="text-sm font-semibold text-slate-600">Cargando tu panel desde Sheets...</p>
-                        </div>
-                    </div>
-                `;
             }
 
             if(!miTienda) {
@@ -865,10 +915,9 @@
                             <h1 class="text-2xl font-extrabold text-slate-900">Hola ${sessionName}</h1>
                             <p class="text-sm font-semibold text-teal-800">Tu tienda: ${miTienda.nombreTienda}</p>
                         </div>
-                        <img src="${miTienda.fotoPerfil || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200'}" class="w-16 h-16 rounded-2xl object-cover border border-slate-200 shadow-sm">
+                        <img src="${miTienda.fotoPerfil || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200'}" loading="lazy" class="w-16 h-16 rounded-2xl object-cover border border-slate-200 shadow-sm">
                     </div>
 
-                    <!-- GRID 2x2 BOTONES -->
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <a href="#t/${miTienda.slug}" class="bg-teal-700 hover:bg-teal-800 text-white p-6 rounded-3xl shadow transition flex flex-col justify-between gap-4 group">
                             <span class="text-3xl">👁️</span>
@@ -927,9 +976,7 @@
             const sessionEmail = state.session ? state.session.email.toLowerCase().trim() : '';
             const myOrders = state.pedidos.filter(o => (o.vendorEmail && o.vendorEmail.toLowerCase().trim() === sessionEmail) || (o.tiendaNombre && o.tiendaNombre.toLowerCase().trim() === miTienda.nombreTienda.toLowerCase().trim()));
             
-            if (myOrders.length === 0) {
-                return `<p class="text-slate-500 text-sm text-center py-6">Aún no recibiste pedidos de clientes.</p>`;
-            }
+            if (myOrders.length === 0) return `<p class="text-slate-500 text-sm text-center py-6">Aún no recibiste pedidos de clientes.</p>`;
 
             return `
                 <div class="space-y-3">
@@ -1043,9 +1090,7 @@
 
             const sessionEmail = state.session.email.toLowerCase().trim();
             let v = null;
-            if(localStorage.ta_mi_tienda) {
-                try { v = JSON.parse(localStorage.ta_mi_tienda); } catch(e){}
-            }
+            if(localStorage.ta_mi_tienda) { try{ v = JSON.parse(localStorage.ta_mi_tienda); }catch(e){} }
             if(!v) {
                 v = [...state.tiendas].reverse().find(t => (t.email && t.email.toLowerCase().trim() === sessionEmail) || (t.dueño && t.dueño.toLowerCase().trim() === sessionEmail)) || {};
             }
@@ -1151,7 +1196,6 @@
             if(!vendor) {
                 vendor = [...state.tiendas].reverse().find(t => (t.email && t.email.toLowerCase().trim() === sessionEmail) || (t.dueño && t.dueño.toLowerCase().trim() === sessionEmail));
             }
-            
             if (!vendor) {
                 window.location.hash = '#crear-tienda';
                 return '';
@@ -1224,7 +1268,7 @@
                                     return `
                                         <div class="border border-slate-200 rounded-2xl p-3 flex items-center justify-between gap-3 bg-slate-50">
                                             <div class="flex items-center gap-3">
-                                                <img src="${pFoto}" class="w-14 h-14 rounded-xl object-cover">
+                                                <img src="${pFoto}" loading="lazy" class="w-14 h-14 rounded-xl object-cover">
                                                 <div>
                                                     <h4 class="text-sm font-bold text-slate-800 line-clamp-1">${p.nombre}</h4>
                                                     <span class="text-xs font-extrabold text-teal-800">$${Number(p.precio).toLocaleString('es-AR')}</span>
@@ -1465,7 +1509,7 @@
                                 <div class="relative h-56 rounded-2xl overflow-hidden bg-slate-100 carousel-container" data-carousel-id="${cId}">
                                     ${fotos.map((f, i) => `
                                         <div class="carousel-slide w-full h-full" style="display: ${i===0?'block':'none'}">
-                                            <img src="${f}" class="w-full h-full object-cover">
+                                            <img src="${f}" loading="lazy" class="w-full h-full object-cover">
                                         </div>
                                     `).join('')}
                                     ${fotos.length > 1 ? `
@@ -1592,20 +1636,9 @@
                 const exists = (state.usuarios && state.usuarios.some(u => u.email && u.email.toLowerCase().trim() === email)) ||
                                (state.tiendas && state.tiendas.some(u => (u.email && u.email.toLowerCase().trim() === email) || (u.dueño && u.dueño.toLowerCase().trim() === email)));
                 
-                if (exists) {
-                    showToast("El email ya está registrado", "error");
-                    return;
-                }
+                if (exists) { showToast("El email ya está registrado", "error"); return; }
 
-                const newUser = {
-                    id: 'usr_' + Date.now(),
-                    email,
-                    pass,
-                    nombre,
-                    wsp,
-                    fecha: new Date().toISOString()
-                };
-
+                const newUser = { id: 'usr_' + Date.now(), email, pass, nombre, wsp, fecha: new Date().toISOString() };
                 state.usuarios.push(newUser);
                 state.session = { email, pass, nombre };
                 localStorage.setItem('ta_session', JSON.stringify(state.session));
@@ -1614,14 +1647,8 @@
                 postToSheets('registro', newUser);
                 showToast("Cuenta creada ✓");
 
-                setTimeout(() => {
-                    window.location.hash = '#crear-tienda';
-                    render();
-                }, 500);
-
-                setTimeout(() => {
-                    fetchAllFromSheets(false);
-                }, 2000);
+                setTimeout(() => { window.location.hash = '#crear-tienda'; render(); }, 500);
+                setTimeout(() => { fetchAllFromSheets(false); }, 2000);
             } catch (err) {
                 console.error("Error in handleRegister:", err);
                 showToast("Error al registrar cuenta", "error");
@@ -1763,9 +1790,7 @@
                 e.target.reset();
                 isEditing = false;
 
-                setTimeout(() => {
-                    fetchAllFromSheets(false);
-                }, 2000);
+                setTimeout(() => { fetchAllFromSheets(false); }, 2000);
             } catch (err) {
                 console.error("Error creating product:", err);
                 isEditing = false;
@@ -1866,7 +1891,6 @@
                     v.fotosCarrusel = JSON.stringify(car);
                 }
 
-                // SOLUCIÓN 2 FRONT
                 localStorage.setItem('ta_mi_tienda', JSON.stringify(v));
                 if (window.allData && window.allData.tiendas) {
                     window.allData.tiendas = window.allData.tiendas.map(t => t.slug === v.slug ? v : t);
@@ -1955,8 +1979,12 @@
             }
         }
 
-        // --- REAL-TIME INTERVAL (2 SECONDS PAUSED IF EDITING) ---
+        // --- INIT & REAL-TIME INTERVAL (2 SECONDS PAUSED IF EDITING) ---
         window.addEventListener('DOMContentLoaded', async () => {
+            if (cachedData) {
+                state.isLoading = false;
+                render();
+            }
             await fetchAllFromSheets(false);
             handleRoute();
 
