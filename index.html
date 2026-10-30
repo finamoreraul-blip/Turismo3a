@@ -184,18 +184,20 @@
         const SHEET_URL = "https://script.google.com/macros/s/AKfycbz6sUbdfJ23AOKNC0hwfGMWTeZ-9Ck4LpgeT4aEGmwm5SA3GVqtj-PGFBjx7PQh7ONWuA/exec";
         const CENTRAL_WSP = "5492983389710";
 
-        // STATE & FLAGS (CARGAR CACHE INICIAL PRIMERO PARA VELOCIDAD TIPO ML)
+        // STATE & FLAGS
         let cachedData = null;
         try {
             cachedData = JSON.parse(localStorage.getItem('ta_market_cache') || 'null');
         } catch(e){}
+
+        let sessionObj = JSON.parse(localStorage.getItem('ta_session') || 'null');
 
         let state = {
             tiendas: cachedData ? cachedData.tiendas : [],
             productos: cachedData ? cachedData.productos : [],
             pedidos: cachedData ? cachedData.pedidos : [],
             usuarios: cachedData ? cachedData.usuarios : [],
-            session: JSON.parse(localStorage.getItem('ta_session') || 'null'),
+            session: sessionObj,
             isOnline: true,
             activeCategory: 'Todos',
             searchQuery: '',
@@ -213,6 +215,27 @@
         let isEditing = false;
         let isFetching = false;
         window.allData = cachedData;
+
+        // --- SOLUCIÓN 1: Función getMiTiendaReal() ÚNICA para todo ---
+        function getMiTiendaReal() {
+            let t = null;
+            try { if(localStorage.ta_mi_tienda) t = JSON.parse(localStorage.ta_mi_tienda); } catch(e){}
+            let session = state.session;
+            if (window.allData && window.allData.tiendas && session && session.email) {
+                let porEmail = [...window.allData.tiendas].reverse().find(x => String(x.email || '').toLowerCase() === String(session.email).toLowerCase());
+                if (porEmail) {
+                    t = porEmail;
+                    localStorage.setItem('ta_mi_tienda', JSON.stringify(porEmail));
+                }
+            } else if (state.tiendas && state.tiendas.length > 0 && session && session.email) {
+                let porEmail = [...state.tiendas].reverse().find(x => String(x.email || '').toLowerCase() === String(session.email).toLowerCase());
+                if (porEmail) {
+                    t = porEmail;
+                    localStorage.setItem('ta_mi_tienda', JSON.stringify(porEmail));
+                }
+            }
+            return t;
+        }
 
         const CATEGORIES = ['Todos', 'Alimentos', 'Servicios', 'Indumentaria', 'Hogar y Deco', 'Belleza', 'Oficios', 'Tecnología', 'Vehículos'];
         const ZONES_TRES_ARROYOS = ['Centro', 'Barrio Norte', 'Barrio Sur', 'Villa Italia', 'Villa Primavera', 'Quintas', 'Planta Urbana General'];
@@ -260,7 +283,7 @@
             }
         }
 
-        // --- FETCH MASTER FROM SHEETS (CON CACHE PRIMERO Y SEGUNDO PLANO) ---
+        // --- FETCH MASTER FROM SHEETS ---
         async function fetchAllFromSheets(isBackground = false) {
             if (isEditing || location.hash.includes('crear-tienda') || location.hash.includes('editar-tienda')) return;
             if (isFetching) return;
@@ -293,9 +316,9 @@
                     state.isOnline = true;
                     state.isLoading = false;
 
-                    if (state.session && state.session.email) {
-                        const found = [...newTiendas].reverse().find(t => t.email && t.email.toLowerCase().trim() === state.session.email.toLowerCase().trim());
-                        if (found) localStorage.setItem('ta_mi_tienda', JSON.stringify(found));
+                    let realT = getMiTiendaReal();
+                    if (realT) {
+                        localStorage.setItem('ta_mi_tienda', JSON.stringify(realT));
                     }
 
                     updateSyncBar(true);
@@ -454,7 +477,8 @@
             const app = document.getElementById('app');
             if (!app) return;
 
-            if (state.isLoading && state.currentView !== 'mi-panel' && state.currentView !== 'editar-tienda' && !localStorage.getItem('ta_mi_tienda') && state.tiendas.length === 0) {
+            let realTInit = getMiTiendaReal();
+            if (state.isLoading && state.currentView !== 'mi-panel' && state.currentView !== 'editar-tienda' && !realTInit && state.tiendas.length === 0) {
                 app.innerHTML = `
                     <div class="max-w-6xl mx-auto px-4 py-6 w-full">
                         <div class="h-44 bg-slate-200 rounded-3xl skeleton mb-6"></div>
@@ -462,6 +486,7 @@
                             <div class="w-20 h-10 rounded-xl skeleton flex-shrink-0"></div>
                             <div class="w-24 h-10 rounded-xl skeleton flex-shrink-0"></div>
                             <div class="w-20 h-10 rounded-xl skeleton flex-shrink-0"></div>
+                            <div class="w-28 h-10 rounded-xl skeleton flex-shrink-0"></div>
                         </div>
                         <div class="grid ml-responsive-grid gap-3">
                             ${[1,2,3,4,5,6].map(() => `
@@ -682,11 +707,22 @@
         }
 
         // ==========================================
-        // 2. TIENDA PÚBLICA VIEW (#t/{slug})
+        // 2. TIENDA PÚBLICA VIEW (#t/{slug}) con SOLUCIÓN 3
         // ==========================================
         function renderTiendaPublicaView() {
             isEditing = false;
-            const vendor = [...state.tiendas].reverse().find(u => u.slug === state.activeSlug);
+            let slugParam = state.activeSlug || '';
+            let slug = slugParam.trim().toLowerCase();
+
+            // SOLUCIÓN 3: Buscar case-insensitive y con trim, y reintentar con original si no encuentra
+            let allT = window.allData && window.allData.tiendas ? window.allData.tiendas : state.tiendas;
+            let vendor = [...allT].reverse().find(x => String(x.slug || '').trim().toLowerCase() === slug);
+            if (!vendor && slugParam) {
+                vendor = [...allT].reverse().find(x => String(x.slug || '').trim() === slugParam.trim());
+            }
+
+            console.log('Buscando', slug, 'disponibles:', allT.map(x => x.slug));
+
             if (!vendor) {
                 return `
                     <div class="max-w-md mx-auto px-4 py-20 text-center space-y-4">
@@ -846,7 +882,7 @@
         }
 
         // ==========================================
-        // 3. MI PANEL VENDEDOR (#mi-panel)
+        // 3. MI PANEL VENDEDOR (#mi-panel) con SOLUCIÓN 2
         // ==========================================
         function renderMiPanel() {
             isEditing = false;
@@ -868,14 +904,20 @@
             }
 
             const session = state.session;
-            let miTienda = null;
-            if(localStorage.ta_mi_tienda){ try { miTienda = JSON.parse(localStorage.ta_mi_tienda); } catch(e){} }
-            if(!miTienda && state.tiendas && state.tiendas.length > 0) {
-                miTienda = [...state.tiendas].reverse().find(t => t.email && t.email.toLowerCase() == session.email.toLowerCase());
-                if(miTienda) localStorage.setItem('ta_mi_tienda', JSON.stringify(miTienda));
+            let miTienda = getMiTiendaReal();
+
+            if (!miTienda && state.isLoading) {
+                return `
+                    <div class="flex-1 flex items-center justify-center py-32 text-center">
+                        <div class="space-y-3">
+                            <span class="text-4xl animate-spin inline-block">⏳</span>
+                            <p class="text-sm font-semibold text-slate-600">Cargando tu panel desde Sheets...</p>
+                        </div>
+                    </div>
+                `;
             }
 
-            if(!miTienda) {
+            if (!miTienda) {
                 return `
                     <header class="bg-white shadow-sm sticky top-0 z-40 w-full">
                         <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
@@ -896,6 +938,30 @@
 
             const sessionName = session.nombre || miTienda.dueño || 'Emprendedor';
             const publicLink = `${window.location.origin}${window.location.pathname}#t/${miTienda.slug}`;
+
+            // SOLUCIÓN 2: Botón Ver mi tienda dinámico seguro
+            let verTiendaBtnHtml = '';
+            if (miTienda && miTienda.slug) {
+                verTiendaBtnHtml = `
+                    <a href="#t/${miTienda.slug}" class="bg-teal-700 hover:bg-teal-800 text-white p-6 rounded-3xl shadow transition flex flex-col justify-between gap-4 group">
+                        <span class="text-3xl">👁️</span>
+                        <div>
+                            <h3 class="text-lg font-bold">Ver mi tienda</h3>
+                            <p class="text-xs text-teal-100 mt-0.5">Vista previa como la ven tus clientes en el market.</p>
+                        </div>
+                    </a>
+                `;
+            } else {
+                verTiendaBtnHtml = `
+                    <div class="bg-teal-700/70 text-white p-6 rounded-3xl shadow flex flex-col justify-between gap-4 cursor-wait">
+                        <span class="text-3xl">⏳</span>
+                        <div>
+                            <h3 class="text-lg font-bold">Cargando tienda...</h3>
+                            <p class="text-xs text-teal-100 mt-0.5">Sincronizando slug...</p>
+                        </div>
+                    </div>
+                `;
+            }
 
             return `
                 <header class="bg-white shadow-sm sticky top-0 z-40 w-full">
@@ -919,13 +985,7 @@
                     </div>
 
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <a href="#t/${miTienda.slug}" class="bg-teal-700 hover:bg-teal-800 text-white p-6 rounded-3xl shadow transition flex flex-col justify-between gap-4 group">
-                            <span class="text-3xl">👁️</span>
-                            <div>
-                                <h3 class="text-lg font-bold">Ver mi tienda</h3>
-                                <p class="text-xs text-teal-100 mt-0.5">Vista previa como la ven tus clientes en el market.</p>
-                            </div>
-                        </a>
+                        ${verTiendaBtnHtml}
 
                         <a href="#editar-tienda" class="bg-slate-900 hover:bg-slate-800 text-white p-6 rounded-3xl shadow transition flex flex-col justify-between gap-4 group">
                             <span class="text-3xl">⚙️</span>
@@ -1000,7 +1060,7 @@
         }
 
         // ==========================================
-        // 4. CREAR TIENDA WIZARD (#crear-tienda)
+        // 4. CREAR TIENDA WIZARD (#crear-tienda) con SOLUCIÓN 4
         // ==========================================
         function renderCrearTienda() {
             isEditing = true;
@@ -1079,7 +1139,7 @@
         }
 
         // ==========================================
-        // 5. EDITAR TIENDA (#editar-tienda)
+        // 5. EDITAR TIENDA (#editar-tienda) con SOLUCIÓN 4
         // ==========================================
         function renderEditarTienda() {
             isEditing = true;
@@ -1088,12 +1148,7 @@
                 return '';
             }
 
-            const sessionEmail = state.session.email.toLowerCase().trim();
-            let v = null;
-            if(localStorage.ta_mi_tienda) { try{ v = JSON.parse(localStorage.ta_mi_tienda); }catch(e){} }
-            if(!v) {
-                v = [...state.tiendas].reverse().find(t => (t.email && t.email.toLowerCase().trim() === sessionEmail) || (t.dueño && t.dueño.toLowerCase().trim() === sessionEmail)) || {};
-            }
+            let v = getMiTiendaReal() || {};
 
             return `
                 <header class="bg-white shadow-sm sticky top-0 z-40 w-full">
@@ -1190,17 +1245,13 @@
                 return '';
             }
 
-            const sessionEmail = state.session.email.toLowerCase().trim();
-            let vendor = null;
-            if(localStorage.ta_mi_tienda) { try{ vendor = JSON.parse(localStorage.ta_mi_tienda); }catch(e){} }
-            if(!vendor) {
-                vendor = [...state.tiendas].reverse().find(t => (t.email && t.email.toLowerCase().trim() === sessionEmail) || (t.dueño && t.dueño.toLowerCase().trim() === sessionEmail));
-            }
+            let vendor = getMiTiendaReal();
             if (!vendor) {
                 window.location.hash = '#crear-tienda';
                 return '';
             }
 
+            const sessionEmail = state.session.email.toLowerCase().trim();
             const myProducts = state.productos.filter(p => (p.vendorEmail && p.vendorEmail.toLowerCase().trim() === sessionEmail) || (p.tiendaSlug && p.tiendaSlug === vendor.slug));
 
             return `
@@ -1674,8 +1725,8 @@
                     state.session = { email: foundUser.email || foundUser.dueño, nombre: foundUser.nombre || foundUser.dueño || 'Usuario' };
                     localStorage.setItem('ta_session', JSON.stringify(state.session));
                     
-                    const tFound = [...state.tiendas].reverse().find(t => t.email && t.email.toLowerCase().trim() === state.session.email.toLowerCase().trim());
-                    if(tFound) localStorage.setItem('ta_mi_tienda', JSON.stringify(tFound));
+                    let realT = getMiTiendaReal();
+                    if(realT) localStorage.setItem('ta_mi_tienda', JSON.stringify(realT));
 
                     state.authModalOpen = false;
                     showToast("¡Sesión iniciada!");
@@ -1705,7 +1756,7 @@
                 const fd = new FormData(e.target);
                 const nombreTienda = fd.get('nombreTienda');
                 const slug = nombreTienda.toLowerCase().replace(/[^a-z0-9]/g, '-') + '-' + Math.random().toString(36).substring(2, 6);
-                const email = state.session ? state.session.email : 'contacto@market.ar';
+                const email = state.session ? state.session.email.toLowerCase().trim() : 'contacto@market.ar';
 
                 let fotoPerfilBase64 = '';
                 const fotoPerfilInput = e.target.querySelector('input[name="fotoPerfil"]');
@@ -1756,12 +1807,7 @@
             isEditing = true;
             try {
                 const fd = new FormData(e.target);
-                const sessionEmail = state.session ? state.session.email.toLowerCase().trim() : '';
-                let vendor = null;
-                if(localStorage.ta_mi_tienda) { try{ vendor = JSON.parse(localStorage.ta_mi_tienda); }catch(e){} }
-                if(!vendor) {
-                    vendor = [...state.tiendas].reverse().find(u => (u.email && u.email.toLowerCase().trim() === sessionEmail) || (u.dueño && u.dueño.toLowerCase().trim() === sessionEmail));
-                }
+                let vendor = getMiTiendaReal();
                 if (!vendor) return;
 
                 const fotosInput = document.getElementById('new-prod-fotos');
@@ -1772,7 +1818,7 @@
 
                 const newProd = {
                     id: 'prod_' + Math.random().toString(36).substring(2, 8),
-                    vendorEmail: vendor.email || sessionEmail,
+                    vendorEmail: vendor.email || (state.session ? state.session.email : ''),
                     tiendaSlug: vendor.slug,
                     nombre: fd.get('nombre'),
                     precio: Number(fd.get('precio')),
@@ -1860,12 +1906,7 @@
             isEditing = true;
             try {
                 const fd = new FormData(e.target);
-                const sessionEmail = state.session ? state.session.email.toLowerCase().trim() : '';
-                let v = null;
-                if(localStorage.ta_mi_tienda) { try{ v = JSON.parse(localStorage.ta_mi_tienda); }catch(e){} }
-                if(!v) {
-                    v = [...state.tiendas].reverse().find(u => (u.email && u.email.toLowerCase().trim() === sessionEmail) || (u.dueño && u.dueño.toLowerCase().trim() === sessionEmail));
-                }
+                let v = getMiTiendaReal();
                 if (!v) return;
 
                 v.nombreTienda = fd.get('nombreTienda');
@@ -1878,7 +1919,7 @@
                 v.webUrl = fd.get('webUrl');
                 v.horario = fd.get('horario');
                 v.vehiculo = fd.get('vehiculo');
-                v.email = sessionEmail;
+                v.email = state.session ? state.session.email.toLowerCase().trim() : v.email;
 
                 const fotoPerfilInput = e.target.querySelector('input[name="fotoPerfil"]');
                 if (fotoPerfilInput && fotoPerfilInput.files.length > 0) {
@@ -1891,6 +1932,7 @@
                     v.fotosCarrusel = JSON.stringify(car);
                 }
 
+                // SOLUCIÓN 4: Actualizar ta_mi_tienda y allData con el slug exacto
                 localStorage.setItem('ta_mi_tienda', JSON.stringify(v));
                 if (window.allData && window.allData.tiendas) {
                     window.allData.tiendas = window.allData.tiendas.map(t => t.slug === v.slug ? v : t);
