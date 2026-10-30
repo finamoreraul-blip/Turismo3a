@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>TresaMarket | Marketplace Local</title>
+    <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -94,6 +95,7 @@
 
         window.allData = cachedData || { productos: [], pedidos: [], usuarios: [] };
 
+        // Normalización y conversión de imagen a JPG mediante Canvas para evitar errores de tipo MIME / HEIC
         async function uploadImageToDrive(file) {
             if (!file) return '';
             if (typeof file === 'string') return file;
@@ -101,9 +103,34 @@
                 const base64Data = await new Promise((resolve) => {
                     const reader = new FileReader();
                     reader.readAsDataURL(file);
-                    reader.onload = (e) => resolve(e.target.result);
+                    reader.onload = (e) => {
+                        const img = new Image();
+                        img.src = e.target.result;
+                        img.onload = () => {
+                            const canvas = document.createElement('canvas');
+                            let width = img.width;
+                            let height = img.height;
+                            
+                            const MAX_WIDTH = 1200;
+                            const MAX_HEIGHT = 1200;
+                            if (width > height) {
+                                if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
+                            } else {
+                                if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; }
+                            }
+                            
+                            canvas.width = width;
+                            canvas.height = height;
+                            const ctx = canvas.getContext('2d');
+                            ctx.drawImage(img, 0, 0, width, height);
+                            
+                            resolve(canvas.toDataURL('image/jpeg', 0.85));
+                        };
+                        img.onerror = () => resolve(e.target.result);
+                    };
                     reader.onerror = () => resolve('');
                 });
+
                 if (!base64Data) return '';
                 const base64Clean = base64Data.includes(',') ? base64Data.split(',')[1] : base64Data;
 
@@ -112,9 +139,9 @@
                     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
                     body: JSON.stringify({
                         action: 'uploadImage',
-                        name: file.name || 'foto.jpg',
+                        name: (file.name ? file.name.split('.')[0] : 'foto') + '.jpg',
                         base64: base64Clean,
-                        type: file.type || 'image/jpeg'
+                        type: 'image/jpeg'
                     })
                 });
                 const data = await response.json();
@@ -129,7 +156,6 @@
             let files = Array.from(fileList).slice(0, maxCount);
             let urls = [];
             for (let f of files) {
-                if (!f.type || !f.type.startsWith('image/')) continue;
                 let url = await uploadImageToDrive(f);
                 if (url) urls.push(url);
             }
@@ -424,7 +450,6 @@
         function renderMisProductos() {
             if (!state.session) { window.location.hash = ''; return ''; }
             const myProds = state.productos.filter(p => p.vendorEmail === state.session.email);
-            let currentUser = state.usuarios.find(u => u.email === state.session.email) || {};
             let editP = state.editingProduct;
 
             return `
@@ -557,7 +582,7 @@
                 }
 
                 if (!fotosArr || fotosArr.length === 0) {
-                    showToast("Debes subir al menos 1 foto válida (image/*)", "error");
+                    showToast("Debes subir al menos 1 foto válida", "error");
                     if (btnSubmit) { btnSubmit.disabled = false; btnSubmit.innerText = "Publicar Producto"; }
                     return;
                 }
@@ -761,7 +786,7 @@
 
             await fetch(SCRIPT_URL, { method: 'POST', mode: 'no-cors', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: new URLSearchParams({ action: 'registro', ...newUser }) });
             showToast("Registro exitoso ✓");
-            window.location.hash = '#mis-productos';
+            window.location.hash = '#mi-panel';
             setTimeout(() => fetchData(true), 1500);
         }
 
