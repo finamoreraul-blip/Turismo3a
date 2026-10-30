@@ -187,7 +187,7 @@
         // STATE & FLAGS
         let cachedData = null;
         try {
-            cachedData = JSON.parse(localStorage.getItem('ta_market_cache') || 'null');
+            cachedData = JSON.parse(localStorage.getItem('ta_cache') || localStorage.getItem('ta_market_cache') || 'null');
         } catch(e){}
 
         let sessionObj = JSON.parse(localStorage.getItem('ta_session') || 'null');
@@ -217,30 +217,23 @@
         window.allData = cachedData || { tiendas: [], productos: [], pedidos: [], usuarios: [] };
         window.session = state.session;
 
-        // --- FUNCIÓN getMiTiendaReal() ---
+        // --- SOLUCIÓN 3: getMiTiendaReal() priorizando allData.tiendas ---
         function getMiTiendaReal() {
-            let t = null;
-            try { if(localStorage.ta_mi_tienda) t = JSON.parse(localStorage.ta_mi_tienda); } catch(e){}
-            let currentSession = state.session || window.session;
-            let currentAllData = window.allData || cachedData;
-
-            if (currentAllData && currentAllData.tiendas && currentSession && currentSession.email) {
-                let porEmail = [...currentAllData.tiendas].reverse().find(x => String(x.email || '').toLowerCase() === String(currentSession.email).toLowerCase());
-                if (porEmail) {
-                    t = porEmail;
-                    localStorage.setItem('ta_mi_tienda', JSON.stringify(porEmail));
-                }
-            } else if (state.tiendas && state.tiendas.length > 0 && currentSession && currentSession.email) {
-                let porEmail = [...state.tiendas].reverse().find(x => String(x.email || '').toLowerCase() === String(currentSession.email).toLowerCase());
-                if (porEmail) {
-                    t = porEmail;
-                    localStorage.setItem('ta_mi_tienda', JSON.stringify(porEmail));
-                }
+            let session = state.session || window.session;
+            if (window.allData && window.allData.tiendas && session && session.email) {
+                let t = [...window.allData.tiendas].reverse().find(x => String(x.email || '').toLowerCase() === String(session.email).toLowerCase());
+                if (t) return t;
             }
-            return t;
+            try {
+                let local = JSON.parse(localStorage.getItem('ta_mi_tienda') || 'null');
+                if (local && session && session.email && String(local.email||'').toLowerCase() === String(session.email).toLowerCase()) {
+                    return local;
+                }
+            } catch(e){}
+            return null;
         }
 
-        // --- SOLUCIÓN 2: Búsqueda a prueba de todo (findTienda) ---
+        // --- BÚSQUEDA A PRUEBA DE TODO (findTienda) ---
         function findTienda(slugBuscado) {
             let currentAllData = window.allData || cachedData || { tiendas: state.tiendas };
             if (!currentAllData || !currentAllData.tiendas) return null;
@@ -305,61 +298,56 @@
             }
         }
 
-        // --- FETCH MASTER FROM SHEETS ---
-        async function fetchAllFromSheets(isBackground = false) {
-            if (isEditing || location.hash.includes('crear-tienda') || location.hash.includes('editar-tienda')) return;
-            if (isFetching) return;
-            if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') && isBackground) return;
+        // --- SOLUCIÓN 1: FETCH SIEMPRE CON ANTI-CACHE ---
+        function fetchData(force = false) {
+            let url = SHEET_URL + '?_=' + Date.now() + '&r=' + Math.random();
+            return fetch(url, { cache: 'no-store' }).then(r => r.json()).then(data => {
+                window.allData = data;
+                localStorage.setItem('ta_cache', JSON.stringify(data));
+                localStorage.setItem('ta_market_cache', JSON.stringify(data));
+                localStorage.setItem('ta_cache_time', Date.now());
 
-            isFetching = true;
-            try {
-                const res = await fetch(`${SHEET_URL}?action=get_all`, { cache: 'no-store' });
-                const data = await res.json();
-                
-                if (data) {
-                    window.allData = data;
-                    localStorage.setItem('ta_market_cache', JSON.stringify(data));
+                state.tiendas = data.tiendas || [];
+                state.productos = data.productos || [];
+                state.pedidos = data.pedidos || [];
+                state.usuarios = data.usuarios || [];
+                state.isOnline = true;
+                state.isLoading = false;
 
-                    const newTiendas = data.tiendas || [];
-                    const newProductos = data.productos || [];
-                    const newPedidos = data.pedidos || [];
-                    const newUsuarios = data.usuarios || [];
-
-                    const hasChanged = 
-                        JSON.stringify(newTiendas) !== JSON.stringify(state.tiendas) ||
-                        JSON.stringify(newProductos) !== JSON.stringify(state.productos) ||
-                        JSON.stringify(newPedidos) !== JSON.stringify(state.pedidos) ||
-                        JSON.stringify(newUsuarios) !== JSON.stringify(state.usuarios);
-
-                    state.tiendas = newTiendas;
-                    state.productos = newProductos;
-                    state.pedidos = newPedidos;
-                    state.usuarios = newUsuarios;
-                    state.isOnline = true;
-                    state.isLoading = false;
-
-                    let realT = getMiTiendaReal();
-                    if (realT) {
-                        localStorage.setItem('ta_mi_tienda', JSON.stringify(realT));
-                    }
-
-                    updateSyncBar(true);
-
-                    if (hasChanged && isBackground && !isEditing) {
-                        render();
-                    } else if (!isBackground) {
-                        render();
-                    }
+                let realT = getMiTiendaReal();
+                if (realT) {
+                    localStorage.setItem('ta_mi_tienda', JSON.stringify(realT));
                 }
-            } catch (err) {
+
+                updateSyncBar(true);
+                render();
+                return data;
+            }).catch(err => {
                 console.error("Error fetching from Sheets:", err);
                 state.isOnline = false;
                 state.isLoading = false;
                 updateSyncBar(false);
-                if (!isBackground) render();
-            } finally {
-                isFetching = false;
-            }
+                return null;
+            });
+        }
+
+        // Inicialización de caché
+        let cacheTime = parseInt(localStorage.getItem('ta_cache_time') || '0');
+        if (Date.now() - cacheTime > 30000 || !localStorage.getItem('ta_cache')) {
+            fetchData(true);
+        } else {
+            try {
+                let cached = JSON.parse(localStorage.getItem('ta_cache'));
+                if (cached) {
+                    window.allData = cached;
+                    state.tiendas = cached.tiendas || [];
+                    state.productos = cached.productos || [];
+                    state.pedidos = cached.pedidos || [];
+                    state.usuarios = cached.usuarios || [];
+                    state.isLoading = false;
+                }
+            } catch(e){}
+            fetchData(false); // en segundo plano actualiza
         }
 
         function updateSyncBar(online) {
@@ -377,7 +365,7 @@
 
         function manualSync() {
             showToast("Sincronizando con Sheets...");
-            fetchAllFromSheets(false);
+            fetchData(true);
         }
 
         function postToSheets(action, payload) {
@@ -438,7 +426,7 @@
             }, 3000);
         }
 
-        // --- SOLUCIÓN 3: ROUTER CON CAPTURA EXACTA DE #t/ ---
+        // --- ROUTER ---
         let lastHash = '';
         function handleRoute() {
             const hash = window.location.hash;
@@ -532,7 +520,6 @@
             } else if (state.currentView === 'mis-productos') {
                 html = renderMisProductos();
             } else if (state.currentView === 'tienda-publica') {
-                // Tienda pública se renderiza directo en renderTienda o aquí si state.currentView
                 html = renderTiendaPublicaView();
             } else {
                 html = renderGeneralCatalogView();
@@ -543,7 +530,11 @@
             startCarousels();
         }
 
-        // --- SOLUCIÓN 1: RENDER TIENDA CON DEBUG VISIBLE ---
+        function renderApp() {
+            render();
+        }
+
+        // --- RENDER TIENDA CON DEBUG VISIBLE ---
         function renderTienda(slugParam) {
             state.activeSlug = slugParam;
             state.currentView = 'tienda-publica';
@@ -772,7 +763,7 @@
         }
 
         // ==========================================
-        // 1. GENERAL CATALOG & HEADER SESSION
+        // GENERAL CATALOG & HEADER SESSION
         // ==========================================
         function renderGeneralCatalogView() {
             isEditing = false;
@@ -900,7 +891,7 @@
         }
 
         // ==========================================
-        // 3. MI PANEL VENDEDOR (#mi-panel) con SOLUCIÓN 4
+        // MI PANEL VENDEDOR (#mi-panel)
         // ==========================================
         function renderMiPanel() {
             isEditing = false;
@@ -957,7 +948,6 @@
             const sessionName = session.nombre || miTienda.dueño || 'Emprendedor';
             const publicLink = `${window.location.origin}${window.location.pathname}#t/${miTienda.slug}`;
 
-            // SOLUCIÓN 4: Botón Ver mi tienda usa findTienda por email, no por slug guardado
             let realStoreForLink = findTienda(miTienda.slug);
             let verTiendaBtnHtml = '';
             if (realStoreForLink && realStoreForLink.slug) {
@@ -1079,7 +1069,7 @@
         }
 
         // ==========================================
-        // 4. CREAR TIENDA WIZARD (#crear-tienda)
+        // CREAR TIENDA WIZARD (#crear-tienda)
         // ==========================================
         function renderCrearTienda() {
             isEditing = true;
@@ -1158,7 +1148,7 @@
         }
 
         // ==========================================
-        // 5. EDITAR TIENDA (#editar-tienda)
+        // EDITAR TIENDA (#editar-tienda)
         // ==========================================
         function renderEditarTienda() {
             isEditing = true;
@@ -1255,7 +1245,7 @@
         }
 
         // ==========================================
-        // 6. MIS PRODUCTOS (#mis-productos)
+        // MIS PRODUCTOS (#mis-productos)
         // ==========================================
         function renderMisProductos() {
             isEditing = false;
@@ -1361,7 +1351,7 @@
         }
 
         // ==========================================
-        // 7. ADMIN PANEL (#admin)
+        // ADMIN PANEL (#admin)
         // ==========================================
         function renderAdminView() {
             isEditing = false;
@@ -1502,7 +1492,7 @@
         }
 
         // ==========================================
-        // 8. MODALS
+        // MODALS
         // ==========================================
         function renderModals() {
             let modalsHtml = '';
@@ -1686,7 +1676,7 @@
         }
 
         // ==========================================
-        // 9. CONTROLLERS & AUTHENTICATION
+        // CONTROLLERS & AUTHENTICATION
         // ==========================================
         function openAuthModal(tab = 'login') {
             state.authModalOpen = true;
@@ -1719,7 +1709,7 @@
                 showToast("Cuenta creada ✓");
 
                 setTimeout(() => { window.location.hash = '#crear-tienda'; render(); }, 500);
-                setTimeout(() => { fetchAllFromSheets(false); }, 2000);
+                setTimeout(() => { fetchData(true); }, 2000);
             } catch (err) {
                 console.error("Error in handleRegister:", err);
                 showToast("Error al registrar cuenta", "error");
@@ -1787,6 +1777,7 @@
                 }
 
                 const newTienda = {
+                    action: 'crear_tienda',
                     id: 'tienda_' + Date.now(),
                     email,
                     slug,
@@ -1808,16 +1799,8 @@
                     fecha: new Date().toISOString()
                 };
 
-                state.tiendas.push(newTienda);
-                localStorage.setItem('ta_mi_tienda', JSON.stringify(newTienda));
-                postToSheets('crear_tienda', newTienda);
-                isEditing = false;
-                showToast("Tienda guardada ✓");
-                
-                setTimeout(() => {
-                    window.location.hash = '#mi-panel';
-                    fetchAllFromSheets(false);
-                }, 1000);
+                showToast('Guardando tienda...');
+                await guardarTienda(newTienda);
             } catch (err) {
                 console.error("Error creating store wizard:", err);
                 showToast("Error al crear tienda", "error");
@@ -1839,6 +1822,7 @@
                 }
 
                 const newProd = {
+                    action: 'crear_producto',
                     id: 'prod_' + Math.random().toString(36).substring(2, 8),
                     vendorEmail: vendor.email || (state.session ? state.session.email : ''),
                     tiendaSlug: vendor.slug,
@@ -1852,13 +1836,10 @@
                     activo: 'true'
                 };
 
-                state.productos.push(newProd);
-                postToSheets('crear_producto', newProd);
-                showToast("Guardado, actualizando...");
+                showToast('Guardando producto...');
+                await guardarTienda(newProd);
                 e.target.reset();
                 isEditing = false;
-
-                setTimeout(() => { fetchAllFromSheets(false); }, 2000);
             } catch (err) {
                 console.error("Error creating product:", err);
                 isEditing = false;
@@ -1873,7 +1854,7 @@
                 p.activo = !currentActive ? 'true' : 'false';
                 postToSheets('actualizar_producto', p);
                 showToast("Actualizando estado...");
-                setTimeout(() => fetchAllFromSheets(false), 1500);
+                setTimeout(() => fetchData(true), 1500);
             }
         }
 
@@ -1882,7 +1863,7 @@
                 state.productos = state.productos.filter(p => p.id !== id);
                 postToSheets('borrar_producto', { id });
                 showToast("Eliminando producto...");
-                setTimeout(() => fetchAllFromSheets(false), 1500);
+                setTimeout(() => fetchData(true), 1500);
             }
         }
 
@@ -1900,6 +1881,7 @@
                 const p = state.productos.find(prod => prod.id === id);
                 if (!p) return;
 
+                p.action = 'actualizar_producto';
                 p.nombre = fd.get('nombre');
                 p.precio = Number(fd.get('precio'));
                 p.categoria = fd.get('categoria');
@@ -1913,13 +1895,51 @@
 
                 state.editProductModal = null;
                 isEditing = false;
-                postToSheets('actualizar_producto', p);
-                showToast("Guardado, actualizando...");
-                setTimeout(() => fetchAllFromSheets(false), 2000);
+                showToast('Actualizando producto...');
+                await guardarTienda(p);
             } catch (err) {
                 console.error("Error updating product:", err);
                 isEditing = false;
                 showToast("Error al actualizar producto", "error");
+            }
+        }
+
+        // --- SOLUCIÓN 2: FUNCIÓN guardarTienda ROBUSTA CON 2 SEG ESPERA Y RECARGA FRESCAS ---
+        async function guardarTienda(datos) {
+            try {
+                let resp = await fetch(SHEET_URL, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(datos)
+                });
+                console.log('Guardado Sheets enviado', resp);
+                
+                showToast('¡Guardado! Actualizando...');
+                await new Promise(r => setTimeout(r, 2000));
+
+                let fresh = await fetchData(true);
+                let userEmail = state.session ? state.session.email : (datos.email || '');
+
+                if (fresh && fresh.tiendas) {
+                    let miFresca = [...fresh.tiendas].reverse().find(x => String(x.email || '').toLowerCase() === String(userEmail).toLowerCase());
+                    if (miFresca) {
+                        localStorage.setItem('ta_mi_tienda', JSON.stringify(miFresca));
+                        location.hash = '#t/' + miFresca.slug;
+                    } else if (datos.slug) {
+                        location.hash = '#t/' + datos.slug;
+                    } else {
+                        location.hash = '#mi-panel';
+                    }
+                } else {
+                    location.hash = '#mi-panel';
+                }
+                isEditing = false;
+                renderApp();
+            } catch (err) {
+                console.error("Error in guardarTienda:", err);
+                isEditing = false;
+                showToast("Error al guardar en Sheets", "error");
             }
         }
 
@@ -1928,9 +1948,9 @@
             isEditing = true;
             try {
                 const fd = new FormData(e.target);
-                let v = getMiTiendaReal();
-                if (!v) return;
+                let v = getMiTiendaReal() || {};
 
+                v.action = 'editar_tienda';
                 v.nombreTienda = fd.get('nombreTienda');
                 v.descripcion = fd.get('descripcion');
                 v.direccion = fd.get('direccion');
@@ -1955,19 +1975,8 @@
                 }
 
                 localStorage.setItem('ta_mi_tienda', JSON.stringify(v));
-                if (window.allData && window.allData.tiendas) {
-                    window.allData.tiendas = window.allData.tiendas.map(t => t.slug === v.slug ? v : t);
-                }
-                state.tiendas = state.tiendas.map(t => t.slug === v.slug ? v : t);
-
-                postToSheets('editar_tienda', v);
-
-                isEditing = false;
-                showToast("Tienda actualizada ✓");
-                setTimeout(() => {
-                    window.location.hash = '#t/' + v.slug;
-                    renderTienda(v.slug);
-                }, 800);
+                showToast('Guardando cambios de tienda...');
+                await guardarTienda(v);
             } catch (err) {
                 console.error("Error in handleSaveStore:", err);
                 isEditing = false;
@@ -2007,6 +2016,7 @@
                 mensaje += `\nTotal cliente: $${totalCliente.toLocaleString('es-AR')}`;
 
                 const newOrder = {
+                    action: 'crear_pedido',
                     id: 'ord_' + Date.now(),
                     vendorEmail: vendor.email || '',
                     tiendaNombre: vendor.nombreTienda,
@@ -2035,31 +2045,30 @@
 
                 state.selectedProductModal = null;
                 showToast("¡Pedido enviado por WhatsApp!");
-                setTimeout(() => fetchAllFromSheets(false), 1500);
+                setTimeout(() => fetchData(true), 1500);
             } catch (err) {
                 console.error("Error in enviarPedidoWhatsApp:", err);
                 showToast("Error al procesar pedido", "error");
             }
         }
 
-        // --- INIT & REAL-TIME INTERVAL (2 SECONDS PAUSED IF EDITING) ---
+        // --- INIT & REAL-TIME INTERVAL ---
         window.addEventListener('DOMContentLoaded', async () => {
             if (cachedData) {
                 state.isLoading = false;
                 render();
             }
-            await fetchAllFromSheets(false);
             handleRoute();
 
             setInterval(() => {
                 if (isEditing || location.hash.includes('crear-tienda') || location.hash.includes('editar-tienda')) return;
                 if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA')) return;
-                fetchAllFromSheets(true);
-            }, 2000);
+                fetchData(false);
+            }, 5000);
 
             document.addEventListener('visibilitychange', async () => {
                 if (document.visibilityState === 'visible' && !isEditing && !location.hash.includes('crear-tienda') && !location.hash.includes('editar-tienda')) {
-                    await fetchAllFromSheets(false);
+                    await fetchData(true);
                 }
             });
         });
