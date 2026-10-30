@@ -52,7 +52,6 @@
             scrollbar-width: none;
         }
 
-        /* MERCADO LIBRE STYLE GRID & CARDS (CON NUESTROS COLORES Y 2 COLUMNAS EN CELU) */
         @media (max-width: 768px) {
             .ml-responsive-grid {
                 grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
@@ -123,7 +122,6 @@
             color: #0f766e;
         }
 
-        /* SKELETON LOADER ANIMATION */
         @keyframes pulse-fast {
             0%, 100% { opacity: 1; }
             50% { opacity: 0.5; }
@@ -147,15 +145,12 @@
 </head>
 <body class="bg-bglight text-dark min-h-screen flex flex-col transition-all duration-150">
 
-    <!-- SYNC STATUS BAR -->
     <div id="sync-bar" class="bg-slate-800 text-white text-xs py-1 px-4 text-center flex justify-between items-center z-50">
         <span id="sync-status-text">○ Cargando datos desde Sheets...</span>
         <button onclick="manualSync()" class="underline text-teal-300 hover:text-white">Actualizar</button>
     </div>
 
-    <!-- MAIN APP CONTAINER -->
     <div id="app" class="flex-1 flex flex-col w-full transition-all duration-150">
-        <!-- SKELETON INITIAL LOAD -->
         <div class="max-w-6xl mx-auto px-4 py-6 w-full">
             <div class="h-44 bg-slate-200 rounded-3xl skeleton mb-6"></div>
             <div class="flex gap-2 mb-6 overflow-x-auto no-scrollbar">
@@ -176,16 +171,13 @@
         </div>
     </div>
 
-    <!-- TOAST NOTIFICATION CONTAINER -->
     <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
 
     <script>
-        // CONFIG & URL
         const SHEET_URL = "https://script.google.com/macros/s/AKfycbz6sUbdfJ23AOKNC0hwfGMWTeZ-9Ck4LpgeT4aEGmwm5SA3GVqtj-PGFBjx7PQh7ONWuA/exec";
         const IMGBB_API_KEY = "6d209355152554e7d4a1ca9fb1537a4e";
         const CENTRAL_WSP = "5492983389710";
 
-        // STATE & FLAGS
         let cachedData = null;
         try {
             cachedData = JSON.parse(localStorage.getItem('ta_cache') || localStorage.getItem('ta_market_cache') || 'null');
@@ -218,24 +210,20 @@
         window.allData = cachedData || { tiendas: [], productos: [], pedidos: [], usuarios: [] };
         window.session = state.session;
 
-        // --- SUBIR IMAGEN A IMGBB ---
         async function uploadToImgBB(file) {
             if (!file) return '';
             if (typeof file === 'string') {
-                if (file.startsWith('http://') || file.startsWith('https://') || file.startsWith('data:')) {
-                    if (file.startsWith('data:')) {
-                        try {
-                            let arr = file.split(',');
-                            let mime = arr[0].match(/:(.*?);/)[1];
-                            let bstr = atob(arr[1]);
-                            let n = bstr.length;
-                            let u8arr = new Uint8Array(n);
-                            while(n--) { u8arr[n] = bstr.charCodeAt(n); }
-                            file = new Blob([u8arr], {type: mime});
-                        } catch(e) {
-                            return file;
-                        }
-                    } else {
+                if (file.startsWith('http://') || file.startsWith('https://')) return file;
+                if (file.startsWith('data:')) {
+                    try {
+                        let arr = file.split(',');
+                        let mime = arr[0].match(/:(.*?);/)[1];
+                        let bstr = atob(arr[1]);
+                        let n = bstr.length;
+                        let u8arr = new Uint8Array(n);
+                        while(n--) { u8arr[n] = bstr.charCodeAt(n); }
+                        file = new Blob([u8arr], {type: mime});
+                    } catch(e) {
                         return file;
                     }
                 } else {
@@ -1670,7 +1658,6 @@
                 localStorage.setItem('ta_session', JSON.stringify(state.session));
                 state.authModalOpen = false;
 
-                // CORRECCIÓN CLAVE: Enviar como URL-encoded x-www-form-urlencoded para que el doPost de Google Apps Script lo reciba íntegro en e.postData.contents
                 await fetch(SHEET_URL, {
                     method: 'POST',
                     mode: 'no-cors',
@@ -1894,7 +1881,6 @@
             }
         }
 
-        // --- SOLUCIÓN CRÍTICA: ENVÍO CON x-www-form-urlencoded PARA GOOGLE APPS SCRIPT ---
         async function guardarTienda(datos) {
             try {
                 let resp = await fetch(SHEET_URL, {
@@ -1946,18 +1932,23 @@
                 v.direccion = fd.get('direccion') || '';
                 v.zona = fd.get('zona');
                 v.wsp = fd.get('wsp');
-                v.instagramUrl = fd.get('instagramUrl');
-                v.facebookUrl = fd.get('facebookUrl');
-                v.webUrl = fd.get('webUrl');
+                v.instagramUrl = fd.get('instagramUrl') || v.instagramUrl || '';
+                v.facebookUrl = fd.get('facebookUrl') || v.facebookUrl || '';
+                v.webUrl = fd.get('webUrl') || v.webUrl || '';
                 v.horario = fd.get('horario');
                 v.vehiculo = fd.get('vehiculo');
                 v.email = state.session ? state.session.email.toLowerCase().trim() : v.email;
 
                 showToast('Subiendo imágenes a ImgBB antes de guardar...');
+                
                 const fotoPerfilInput = e.target.querySelector('input[name="fotoPerfil"]');
                 if (fotoPerfilInput && fotoPerfilInput.files.length > 0) {
                     let uploadedPerfil = await uploadToImgBB(fotoPerfilInput.files[0]);
-                    if (uploadedPerfil) v.fotoPerfil = uploadedPerfil;
+                    if (uploadedPerfil) {
+                        v.fotoPerfil = uploadedPerfil;
+                    }
+                } else if (!v.fotoPerfil) {
+                    v.fotoPerfil = '';
                 }
 
                 const fotosCarruselInput = e.target.querySelector('input[name="fotosCarrusel"]');
@@ -1968,6 +1959,8 @@
                     }
                 } else if (!v.fotosCarrusel) {
                     v.fotosCarrusel = JSON.stringify([]);
+                } else if (Array.isArray(v.fotosCarrusel)) {
+                    v.fotosCarrusel = JSON.stringify(v.fotosCarrusel);
                 }
 
                 localStorage.setItem('ta_mi_tienda', JSON.stringify(v));
